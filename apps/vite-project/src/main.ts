@@ -6,13 +6,23 @@ import {
 	createBaseMoveMap,
 	createMoveQueue,
 	getMoveAngle,
+	invertMoveNotation,
 	registerMoveKeyboard,
-	type Axis,
 	type Move,
 	type MoveConfig,
 } from './feature/moves'
 import { createScrambleController } from './feature/scramble'
 import { registerRubiksDebug } from './feature/debug'
+import { createAppShell } from './feature/app-shell'
+import { validateWorkspaceMoveNotation } from './feature/workspace/rules'
+import {
+	areWorkspacePositionsEqual,
+	cloneWorkspacePositions,
+	isWorkspacePositionInMoveLayer,
+	rotateWorkspaceGridPosition,
+	type GridPosition,
+	type WorkspacePositions,
+} from './feature/workspace/position'
 import {
 	createXyzFeature,
 	buildCornerFaceMenuData,
@@ -40,104 +50,41 @@ if (!app) {
 	throw new Error('Missing #app container')
 }
 
-const formatLastUpdatedLabel = (isoTimestamp: string | undefined): string => {
-	if (!isoTimestamp) {
-		return '未知'
-	}
-
-	const parsed = new Date(isoTimestamp)
-	if (Number.isNaN(parsed.getTime())) {
-		return isoTimestamp
-	}
-
-	return new Intl.DateTimeFormat('zh-TW', {
-		dateStyle: 'medium',
-		timeStyle: 'medium',
-		hour12: false,
-	}).format(parsed)
-}
-
 const latestCommitTimestamp = import.meta.env.VITE_LAST_COMMIT_TIME
-const latestCommitLabel = formatLastUpdatedLabel(latestCommitTimestamp)
 
 const xyzFeature = createXyzFeature()
 
-app.innerHTML = `
-	<div class="app-shell">
-		<section class="cube-panel" aria-label="魔術方塊視窗">
-			<div id="cube-stage" class="cube-stage"></div>
-		</section>
-		<section class="control-panel" aria-label="互動選單">
-			<div class="control-toolbar">
-				<button id="repeat-last-button" type="button">再一次</button>
-				<button id="history-prev-button" type="button">上一步</button>
-				<button id="history-next-button" type="button">下一步</button>
-				<button id="workspace-toggle-button" type="button" aria-pressed="false">工作區：關</button>
-				<button id="scramble-button" type="button">打亂</button>
-				<button id="help-toggle-button" class="help-toggle-button" type="button" aria-haspopup="dialog" aria-controls="help-panel" aria-expanded="false">
-					說明
-				</button>
-			</div>
-			<section class="move-history" aria-label="轉動歷史">
-				<div id="move-history-list" class="move-history-list"></div>
-			</section>
-			<div id="mobile-turn-menu" class="center-turn-menu" hidden>
-				<div class="center-turn-card" aria-label="手機轉動選單">
-					<p id="mobile-turn-target" class="center-turn-target">請選擇操作</p>
-					<div class="center-turn-actions">
-						<button id="mobile-turn-option-a" type="button">選項一</button>
-						<button id="mobile-turn-option-b" type="button">選項二</button>
-						<button id="mobile-turn-option-c" type="button">選項三</button>
-						<button id="mobile-turn-option-d" type="button">選項四</button>
-					</div>
-					<div class="center-turn-nav-actions">
-						<button id="mobile-turn-back-button" type="button">上一步</button>
-						<button id="mobile-turn-cancel-button" type="button">取消</button>
-					</div>
-				</div>
-			</div>
-		</section>
-	</div>
-	<div id="help-panel" class="help-panel" hidden>
-		<div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
-			<div class="help-card-header">
-				<h2 id="help-title">操作說明</h2>
-				<button id="help-close-button" class="help-close-button" type="button" aria-label="關閉說明">關閉</button>
-			</div>
-			<div class="hud">
-				<h1>Rubik's Cube</h1>
-				<p>按小寫順時針，按大寫逆時針</p>
-				<p>U D L R F B 對應六個面，M E S 對應中間層</p>
-				<p>按 W 可開關工作區模式</p>
-			</div>
-			${xyzFeature.renderView()}
-			<p class="help-last-updated">最後更新時間：<time id="last-updated-time" datetime="${latestCommitTimestamp ?? ''}">${latestCommitLabel}</time></p>
-		</div>
-	</div>
-`
+const {
+	scrambleButton,
+	workspaceToggleButton,
+	repeatLastButton,
+	historyPrevButton,
+	historyNextButton,
+	historyListEl,
+	helpToggleButton,
+	helpCloseButton,
+	helpPanelEl,
+	mobileTurnMenuEl,
+	mobileTurnTargetEl,
+	mobileTurnOptionAButton,
+	mobileTurnOptionBButton,
+	mobileTurnOptionCButton,
+	mobileTurnOptionDButton,
+	mobileTurnBackButton,
+	mobileTurnCancelButton,
+	cubeStageEl,
+} = createAppShell({
+	app,
+	xyzMarkup: xyzFeature.renderView(),
+	latestCommitTimestamp,
+})
 
-const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
-const workspaceToggleButton = document.querySelector<HTMLButtonElement>('#workspace-toggle-button')
-const repeatLastButton = document.querySelector<HTMLButtonElement>('#repeat-last-button')
-const historyPrevButton = document.querySelector<HTMLButtonElement>('#history-prev-button')
-const historyNextButton = document.querySelector<HTMLButtonElement>('#history-next-button')
-const historyListEl = document.querySelector<HTMLDivElement>('#move-history-list')
-const helpToggleButton = document.querySelector<HTMLButtonElement>('#help-toggle-button')
-const helpCloseButton = document.querySelector<HTMLButtonElement>('#help-close-button')
-const helpPanelEl = document.querySelector<HTMLDivElement>('#help-panel')
-const mobileTurnMenuEl = document.querySelector<HTMLDivElement>('#mobile-turn-menu')
-const mobileTurnTargetEl = document.querySelector<HTMLParagraphElement>('#mobile-turn-target')
-const mobileTurnOptionAButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-a')
-const mobileTurnOptionBButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-b')
-const mobileTurnOptionCButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-c')
-const mobileTurnOptionDButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-d')
-const mobileTurnBackButton = document.querySelector<HTMLButtonElement>('#mobile-turn-back-button')
-const mobileTurnCancelButton = document.querySelector<HTMLButtonElement>('#mobile-turn-cancel-button')
-const cubeStageEl = document.querySelector<HTMLDivElement>('#cube-stage')
-
-if (!cubeStageEl) {
-	throw new Error('Missing #cube-stage container')
-}
+const mobileTurnOptionButtons = [
+	mobileTurnOptionAButton,
+	mobileTurnOptionBButton,
+	mobileTurnOptionCButton,
+	mobileTurnOptionDButton,
+] as const
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio, 2))
@@ -184,13 +131,7 @@ const gap = 1.05
 
 const workspaceMargin = 0.08
 
-type GridPosition = {
-	x: number
-	y: number
-	z: number
-}
-
-const trackedWorkspaceGridPositions: [GridPosition, GridPosition, GridPosition] = [
+const trackedWorkspaceGridPositions: WorkspacePositions = [
 	{ x: 1, y: 1, z: 1 },
 	{ x: 1, y: 0, z: 1 },
 	{ x: 1, y: -1, z: 1 },
@@ -254,9 +195,6 @@ const roundedQuarterTurn = (angle: number) => {
 	const quarter = Math.PI / 2
 	return Math.round(angle / quarter) * quarter
 }
-
-const invertMoveNotation = (notation: string) =>
-	notation === notation.toLowerCase() ? notation.toUpperCase() : notation.toLowerCase()
 
 const workspaceOutlineMaterial = new THREE.LineDashedMaterial({
 	color: '#ffffff',
@@ -322,7 +260,7 @@ const syncWorkspaceOutline = (positions: [GridPosition, GridPosition, GridPositi
 	workspaceOutline.computeLineDistances()
 }
 
-const workspaceGridPositions: [GridPosition, GridPosition, GridPosition] = [
+const workspaceGridPositions: WorkspacePositions = [
 	{ ...trackedWorkspaceGridPositions[0] },
 	{ ...trackedWorkspaceGridPositions[1] },
 	{ ...trackedWorkspaceGridPositions[2] },
@@ -331,57 +269,10 @@ let workspaceModeEnabled = false
 
 type WorkspaceMoveRestriction = {
 	requiredInverseNotation: string
-	restorePositions: [GridPosition, GridPosition, GridPosition]
+	restorePositions: WorkspacePositions
 }
 
 let workspaceMoveRestriction: WorkspaceMoveRestriction | null = null
-
-const cloneWorkspacePositions = (
-	positions: [GridPosition, GridPosition, GridPosition],
-): [GridPosition, GridPosition, GridPosition] => [
-	{ ...positions[0] },
-	{ ...positions[1] },
-	{ ...positions[2] },
-]
-
-const sortWorkspacePositions = (positions: [GridPosition, GridPosition, GridPosition]) =>
-	positions
-		.map((position) => `${position.x},${position.y},${position.z}`)
-		.sort()
-		.join('|')
-
-const isSameWorkspacePositions = (
-	a: [GridPosition, GridPosition, GridPosition],
-	b: [GridPosition, GridPosition, GridPosition],
-) => sortWorkspacePositions(a) === sortWorkspacePositions(b)
-
-const isWorkspacePositionInMoveLayer = (position: GridPosition, move: Move) => {
-	if (move.layer === 0) {
-		return position[move.axis] === 0
-	}
-
-	return position[move.axis] === move.layer
-}
-
-const rotateWorkspaceGridPosition = (position: GridPosition, move: Move) => {
-	const angle = getMoveAngle(move.notation, move.clockwise)
-	const axisVector =
-		move.axis === 'x'
-			? new THREE.Vector3(1, 0, 0)
-			: move.axis === 'y'
-				? new THREE.Vector3(0, 1, 0)
-				: new THREE.Vector3(0, 0, 1)
-	const rotated = new THREE.Vector3(position.x, position.y, position.z).applyAxisAngle(
-		axisVector,
-		angle,
-	)
-
-	return {
-		x: Math.round(rotated.x),
-		y: Math.round(rotated.y),
-		z: Math.round(rotated.z),
-	}
-}
 
 for (const x of [cubeBounds.min.x, cubeBounds.max.x]) {
 	for (const y of [cubeBounds.min.y, cubeBounds.max.y]) {
@@ -653,10 +544,9 @@ const setMobileTurnButtonFaceStyle = (
 
 const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
 	const clearAllButtons = () => {
-		clearMobileTurnButtonFaceStyle(mobileTurnOptionAButton)
-		clearMobileTurnButtonFaceStyle(mobileTurnOptionBButton)
-		clearMobileTurnButtonFaceStyle(mobileTurnOptionCButton)
-		clearMobileTurnButtonFaceStyle(mobileTurnOptionDButton)
+		for (const button of mobileTurnOptionButtons) {
+			clearMobileTurnButtonFaceStyle(button)
+		}
 	}
 
 	if (state.kind === 'edge-face') {
@@ -743,32 +633,20 @@ const showMobileTurnMenu = (
 	if (mobileTurnTargetEl) {
 		mobileTurnTargetEl.textContent = targetText
 	}
-	if (mobileTurnOptionAButton) {
-		mobileTurnOptionAButton.textContent = labels[0]
-	}
-	if (mobileTurnOptionBButton) {
-		mobileTurnOptionBButton.textContent = labels[1]
-	}
-	if (mobileTurnOptionCButton) {
-		if (labels.length === 3) {
-			mobileTurnOptionCButton.textContent = labels[2]
-			mobileTurnOptionCButton.hidden = false
-		} else {
-			if (labels.length === 4) {
-				mobileTurnOptionCButton.textContent = labels[2]
-				mobileTurnOptionCButton.hidden = false
-			} else {
-			mobileTurnOptionCButton.hidden = true
-			}
+	for (let index = 0; index < mobileTurnOptionButtons.length; index += 1) {
+		const button = mobileTurnOptionButtons[index]
+		if (!button) {
+			continue
 		}
-	}
-	if (mobileTurnOptionDButton) {
-		if (labels.length === 4) {
-			mobileTurnOptionDButton.textContent = labels[3]
-			mobileTurnOptionDButton.hidden = false
-		} else {
-			mobileTurnOptionDButton.hidden = true
+
+		const label = labels[index]
+		if (label === undefined) {
+			button.hidden = true
+			continue
 		}
+
+		button.textContent = label
+		button.hidden = false
 	}
 	applyMobileTurnMenuButtonColors(state)
 	mobileTurnMenuEl.hidden = false
@@ -855,6 +733,94 @@ const showHistoryActionMenu = (selection: { index: number; notation: string | nu
 		['再一次', '恢復狀態', '逆做'],
 		false,
 	)
+}
+
+const handleMobileTurnOptionClick = (optionIndex: 0 | 1 | 2 | 3) => {
+	if (!pendingMobileTurn) {
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'center-direction') {
+		const centerClockwiseNotation = resolveCenterTurnNotation(pendingMobileTurn.selection, true)
+		const centerCounterClockwiseNotation = resolveCenterTurnNotation(pendingMobileTurn.selection, false)
+		const faceNotation = getFaceNotationFromCenterSelection(pendingMobileTurn.selection)
+		const faceClockwiseNotation = resolveFaceTurnNotation(faceNotation, true)
+		const faceCounterClockwiseNotation = resolveFaceTurnNotation(faceNotation, false)
+		const notations = [
+			centerClockwiseNotation,
+			centerCounterClockwiseNotation,
+			faceClockwiseNotation,
+			faceCounterClockwiseNotation,
+		] as const
+
+		enqueueMoveByNotation(notations[optionIndex], {
+			allowDuringMenu: true,
+		})
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'edge-face' || pendingMobileTurn.kind === 'corner-face') {
+		const selectedFace = pendingMobileTurn.options[optionIndex]
+		if (!selectedFace) {
+			hideMobileTurnMenu()
+			return
+		}
+
+		showFaceDirectionMenu(selectedFace, true)
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'history-action') {
+		if (optionIndex === 0) {
+			if (!pendingMobileTurn.notation) {
+				setStatus('起始狀態沒有可再做的動作')
+				hideMobileTurnMenu()
+				return
+			}
+
+			enqueueMoveByNotation(pendingMobileTurn.notation, {
+				allowDuringMenu: true,
+			})
+			hideMobileTurnMenu()
+			return
+		}
+
+		if (optionIndex === 1) {
+			moveHistoryController.requestJump(pendingMobileTurn.index)
+			hideMobileTurnMenu()
+			return
+		}
+
+		if (optionIndex === 2) {
+			if (!pendingMobileTurn.notation) {
+				setStatus('起始狀態沒有可逆做的動作')
+				hideMobileTurnMenu()
+				return
+			}
+
+			enqueueMoveByNotation(invertAlgorithm(pendingMobileTurn.notation), {
+				allowDuringMenu: true,
+			})
+			hideMobileTurnMenu()
+			return
+		}
+
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (optionIndex === 0 || optionIndex === 1) {
+		enqueueMoveByNotation(
+			resolveFaceTurnNotation(pendingMobileTurn.face.notation, optionIndex === 0),
+			{ allowDuringMenu: true },
+		)
+		hideMobileTurnMenu()
+		return
+	}
+
+	hideMobileTurnMenu()
 }
 
 const getRoundedGridCoord = (value: number) => {
@@ -1135,7 +1101,7 @@ const rotateLayer = (move: Move, done: () => void) => {
 			if (
 				workspaceMoveRestriction &&
 				notation === workspaceMoveRestriction.requiredInverseNotation &&
-				isSameWorkspacePositions(workspaceGridPositions, workspaceMoveRestriction.restorePositions)
+				areWorkspacePositionsEqual(workspaceGridPositions, workspaceMoveRestriction.restorePositions)
 			) {
 				workspaceMoveRestriction = null
 			} else {
@@ -1189,27 +1155,12 @@ const enqueueMoveByNotation = (
 	}
 
 	if (workspaceModeEnabled) {
-		if (workspaceMoveRestriction) {
-			const isUpperU = notation === 'U'
-			const isLowerU = notation === 'u'
-			const isAllowedUnlockMove = notation === workspaceMoveRestriction.requiredInverseNotation
-			if (!isUpperU && !isLowerU && !isAllowedUnlockMove) {
-				setStatus(
-					`工作區已移動，僅可做 ${workspaceMoveRestriction.requiredInverseNotation} 或 U/U'`,
-				)
-				return
-			}
-		} else if (
-			notation !== 'r' &&
-			notation !== 'F' &&
-			notation !== 'u' &&
-			notation !== 'U' &&
-			notation !== 'd' &&
-			notation !== 'D' &&
-			notation !== 'e' &&
-			notation !== 'E'
-		) {
-			setStatus("工作區剛啟用，僅可做 R、F'、U、U'、D、D'、E、E'")
+		const validation = validateWorkspaceMoveNotation(
+			notation,
+			workspaceMoveRestriction?.requiredInverseNotation ?? null,
+		)
+		if (!validation.allowed) {
+			setStatus(validation.message ?? '此動作目前不可用')
 			return
 		}
 	}
@@ -1418,143 +1369,19 @@ helpPanelEl?.addEventListener('click', (event) => {
 })
 
 mobileTurnOptionAButton?.addEventListener('click', () => {
-	if (!pendingMobileTurn) {
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'center-direction') {
-		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, true), {
-			allowDuringMenu: true,
-		})
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[0], true)
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[0], true)
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'history-action') {
-		if (!pendingMobileTurn.notation) {
-			setStatus('起始狀態沒有可再做的動作')
-			hideMobileTurnMenu()
-			return
-		}
-
-		enqueueMoveByNotation(pendingMobileTurn.notation, {
-			allowDuringMenu: true,
-		})
-		hideMobileTurnMenu()
-		return
-	}
-
-	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, true), {
-		allowDuringMenu: true,
-	})
-	hideMobileTurnMenu()
+	handleMobileTurnOptionClick(0)
 })
 
 mobileTurnOptionBButton?.addEventListener('click', () => {
-	if (!pendingMobileTurn) {
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'center-direction') {
-		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, false), {
-			allowDuringMenu: true,
-		})
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[1], true)
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[1], true)
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'history-action') {
-		moveHistoryController.requestJump(pendingMobileTurn.index)
-		hideMobileTurnMenu()
-		return
-	}
-
-	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, false), {
-		allowDuringMenu: true,
-	})
-	hideMobileTurnMenu()
+	handleMobileTurnOptionClick(1)
 })
 
 mobileTurnOptionCButton?.addEventListener('click', () => {
-	if (!pendingMobileTurn) {
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'center-direction') {
-		const faceNotation = getFaceNotationFromCenterSelection(pendingMobileTurn.selection)
-		enqueueMoveByNotation(resolveFaceTurnNotation(faceNotation, true), {
-			allowDuringMenu: true,
-		})
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[2], true)
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[2], true)
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'history-action') {
-		if (!pendingMobileTurn.notation) {
-			setStatus('起始狀態沒有可逆做的動作')
-			hideMobileTurnMenu()
-			return
-		}
-
-		enqueueMoveByNotation(invertAlgorithm(pendingMobileTurn.notation), {
-			allowDuringMenu: true,
-		})
-		hideMobileTurnMenu()
-		return
-	}
-
-	hideMobileTurnMenu()
+	handleMobileTurnOptionClick(2)
 })
 
 mobileTurnOptionDButton?.addEventListener('click', () => {
-	if (!pendingMobileTurn) {
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.kind === 'center-direction') {
-		const faceNotation = getFaceNotationFromCenterSelection(pendingMobileTurn.selection)
-		enqueueMoveByNotation(resolveFaceTurnNotation(faceNotation, false), {
-			allowDuringMenu: true,
-		})
-		hideMobileTurnMenu()
-		return
-	}
-
-	hideMobileTurnMenu()
+	handleMobileTurnOptionClick(3)
 })
 
 mobileTurnBackButton?.addEventListener('click', () => {
