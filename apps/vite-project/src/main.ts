@@ -84,6 +84,7 @@ app.innerHTML = `
 						<button id="mobile-turn-option-a" type="button">選項一</button>
 						<button id="mobile-turn-option-b" type="button">選項二</button>
 						<button id="mobile-turn-option-c" type="button">選項三</button>
+						<button id="mobile-turn-option-d" type="button">選項四</button>
 					</div>
 					<div class="center-turn-nav-actions">
 						<button id="mobile-turn-back-button" type="button">上一步</button>
@@ -124,6 +125,7 @@ const mobileTurnTargetEl = document.querySelector<HTMLParagraphElement>('#mobile
 const mobileTurnOptionAButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-a')
 const mobileTurnOptionBButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-b')
 const mobileTurnOptionCButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-c')
+const mobileTurnOptionDButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-d')
 const mobileTurnBackButton = document.querySelector<HTMLButtonElement>('#mobile-turn-back-button')
 const mobileTurnCancelButton = document.querySelector<HTMLButtonElement>('#mobile-turn-cancel-button')
 const cubeStageEl = document.querySelector<HTMLDivElement>('#cube-stage')
@@ -488,6 +490,7 @@ const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionAButton)
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionBButton)
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionCButton)
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionDButton)
 	}
 
 	if (state.kind === 'edge-face') {
@@ -500,6 +503,7 @@ const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
 			faceColorByNotation[state.options[1].notation],
 		)
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionCButton)
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionDButton)
 		return
 	}
 
@@ -516,6 +520,12 @@ const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
 			mobileTurnOptionCButton,
 			faceColorByNotation[state.options[2].notation],
 		)
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionDButton)
+		return
+	}
+
+	if (state.kind === 'center-direction') {
+		clearAllButtons()
 		return
 	}
 
@@ -547,7 +557,7 @@ const showHelpPanel = () => {
 const showMobileTurnMenu = (
 	state: MobileTurnMenuState,
 	targetText: string,
-	labels: [string, string] | [string, string, string],
+	labels: [string, string] | [string, string, string] | [string, string, string, string],
 	pushHistory = false,
 ) => {
 	if (!mobileTurnMenuEl) {
@@ -578,7 +588,20 @@ const showMobileTurnMenu = (
 			mobileTurnOptionCButton.textContent = labels[2]
 			mobileTurnOptionCButton.hidden = false
 		} else {
+			if (labels.length === 4) {
+				mobileTurnOptionCButton.textContent = labels[2]
+				mobileTurnOptionCButton.hidden = false
+			} else {
 			mobileTurnOptionCButton.hidden = true
+			}
+		}
+	}
+	if (mobileTurnOptionDButton) {
+		if (labels.length === 4) {
+			mobileTurnOptionDButton.textContent = labels[3]
+			mobileTurnOptionDButton.hidden = false
+		} else {
+			mobileTurnOptionDButton.hidden = true
 		}
 	}
 	applyMobileTurnMenuButtonColors(state)
@@ -586,15 +609,20 @@ const showMobileTurnMenu = (
 }
 
 const showCenterDirectionMenu = (selection: CenterTurnSelection, colorLabel: string) => {
-	const clockwiseNotation = resolveCenterTurnNotation(selection, true)
-	const counterClockwiseNotation = resolveCenterTurnNotation(selection, false)
+	const centerClockwiseNotation = resolveCenterTurnNotation(selection, true)
+	const centerCounterClockwiseNotation = resolveCenterTurnNotation(selection, false)
+	const centerFaceNotation = getFaceNotationFromCenterSelection(selection)
+	const faceClockwiseNotation = resolveFaceTurnNotation(centerFaceNotation, true)
+	const faceCounterClockwiseNotation = resolveFaceTurnNotation(centerFaceNotation, false)
 
 	showMobileTurnMenu(
 		{ kind: 'center-direction', selection },
 		formatCenterTarget(colorLabel),
 		[
-			formatMoveNotationLabel(clockwiseNotation),
-			formatMoveNotationLabel(counterClockwiseNotation),
+			formatMoveNotationLabel(centerClockwiseNotation),
+			formatMoveNotationLabel(centerCounterClockwiseNotation),
+			formatMoveNotationLabel(faceClockwiseNotation),
+			formatMoveNotationLabel(faceCounterClockwiseNotation),
 		],
 		false,
 	)
@@ -1215,6 +1243,15 @@ mobileTurnOptionCButton?.addEventListener('click', () => {
 		return
 	}
 
+	if (pendingMobileTurn.kind === 'center-direction') {
+		const faceNotation = getFaceNotationFromCenterSelection(pendingMobileTurn.selection)
+		enqueueMoveByNotation(resolveFaceTurnNotation(faceNotation, true), {
+			allowDuringMenu: true,
+		})
+		hideMobileTurnMenu()
+		return
+	}
+
 	if (pendingMobileTurn.kind === 'corner-face') {
 		showFaceDirectionMenu(pendingMobileTurn.options[2], true)
 		return
@@ -1233,6 +1270,24 @@ mobileTurnOptionCButton?.addEventListener('click', () => {
 		}
 
 		enqueueMoveByNotation(invertAlgorithm(pendingMobileTurn.notation), {
+			allowDuringMenu: true,
+		})
+		hideMobileTurnMenu()
+		return
+	}
+
+	hideMobileTurnMenu()
+})
+
+mobileTurnOptionDButton?.addEventListener('click', () => {
+	if (!pendingMobileTurn) {
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'center-direction') {
+		const faceNotation = getFaceNotationFromCenterSelection(pendingMobileTurn.selection)
+		enqueueMoveByNotation(resolveFaceTurnNotation(faceNotation, false), {
 			allowDuringMenu: true,
 		})
 		hideMobileTurnMenu()
