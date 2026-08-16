@@ -7,6 +7,9 @@ export const createBaseMoveMap = (): MoveConfigMap => ({
 	l: { axis: 'x', layer: -1 },
 	f: { axis: 'z', layer: 1 },
 	b: { axis: 'z', layer: -1 },
+	m: { axis: 'x', layer: 0 },
+	e: { axis: 'y', layer: 0 },
+	s: { axis: 'z', layer: 0 },
 })
 
 const quarterTurnByFace: Record<string, number> = {
@@ -16,6 +19,9 @@ const quarterTurnByFace: Record<string, number> = {
 	l: Math.PI / 2,
 	f: -Math.PI / 2,
 	b: Math.PI / 2,
+	m: Math.PI / 2,
+	e: Math.PI / 2,
+	s: -Math.PI / 2,
 	x: -Math.PI / 2,
 	y: -Math.PI / 2,
 	z: -Math.PI / 2,

@@ -13,6 +13,9 @@ export type EdgeFaceTarget = {
 
 export type CornerFaceTarget = EdgeFaceTarget
 
+export type MiddleLayerNotation = 'm' | 'e' | 's'
+export type TurnNotation = EdgeFaceTarget['notation'] | MiddleLayerNotation
+
 const faceByAxisSign: Record<Axis, Record<-1 | 1, EdgeFaceTarget>> = {
 	x: {
 		[-1]: { axis: 'x', sign: -1, notation: 'l' },
@@ -80,6 +83,37 @@ export const getCornerFaceTargetsFromGridPosition = (position: {
 	]
 }
 
+export const getMiddleLayerNotationFromGridPosition = (position: {
+	x: number
+	y: number
+	z: number
+}): MiddleLayerNotation | null => {
+	const entries = [
+		['x', position.x],
+		['y', position.y],
+		['z', position.z],
+	] as const
+
+	const zeroAxes = entries.filter(([, value]) => value === 0)
+	if (zeroAxes.length !== 1) {
+		return null
+	}
+
+	const nonZero = entries.filter(([, value]) => value !== 0)
+	if (nonZero.length !== 2 || nonZero.some(([, value]) => Math.abs(value) !== 1)) {
+		return null
+	}
+
+	const [axis] = zeroAxes[0]
+	if (axis === 'x') {
+		return 'm'
+	}
+	if (axis === 'y') {
+		return 'e'
+	}
+	return 's'
+}
+
 export const resolveCenterTurnNotation = (
 	selection: CenterTurnSelection,
 	clockwise: boolean,
@@ -89,6 +123,6 @@ export const resolveCenterTurnNotation = (
 }
 
 export const resolveFaceTurnNotation = (
-	faceNotation: EdgeFaceTarget['notation'],
+	notation: TurnNotation,
 	clockwise: boolean,
-) => (clockwise ? faceNotation : faceNotation.toUpperCase())
+) => (clockwise ? notation : notation.toUpperCase())

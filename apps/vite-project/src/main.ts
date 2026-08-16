@@ -17,11 +17,13 @@ import {
 	createXyzFeature,
 	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
+	getMiddleLayerNotationFromGridPosition,
 	resolveCenterTurnNotation,
 	resolveFaceTurnNotation,
 	type CenterTurnSelection,
 	type CornerFaceTarget,
 	type EdgeFaceTarget,
+	type MiddleLayerNotation,
 } from './feature/xyz'
 import {
 	createCubeStateAdapter,
@@ -77,7 +79,7 @@ app.innerHTML = `
 			<div class="hud">
 				<h1>Rubik's Cube</h1>
 				<p>按小寫順時針，按大寫逆時針</p>
-				<p>U D L R F B 對應六個面</p>
+				<p>U D L R F B 對應六個面，M E S 對應中間層</p>
 				<p>手機點中心塊、邊塊或角塊可操作轉動</p>
 			</div>
 			${xyzFeature.renderView()}
@@ -166,7 +168,13 @@ type MobileCornerFaceOption = {
 	notation: CornerFaceTarget['notation']
 }
 
+type MobileMiddleLayerOption = {
+	label: '中間層'
+	notation: MiddleLayerNotation
+}
+
 type MobileFaceOption = MobileEdgeFaceOption | MobileCornerFaceOption
+type MobileTurnOption = MobileFaceOption | MobileMiddleLayerOption
 
 const colorLabelByHex: Record<string, string> = {
 	[new THREE.Color(facePalette.right).getHexString()]: '橘色',
@@ -231,8 +239,12 @@ const formatCenterTarget = (selection: CenterTurnSelection) => {
 	return `已選中心塊：${label}`
 }
 
-const formatFaceTarget = (options: MobileFaceOption[]) =>
-	`已選${options.length === 2 ? '邊塊' : '角塊'}：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
+const formatEdgeTarget = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption]) =>
+	`已選邊塊：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
+
+const formatCornerTarget = (
+	options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
+) => `已選角塊：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
 
 const formatMoveNotationLabel = (notation: string) => {
 	const upper = notation.toUpperCase()
@@ -240,7 +252,7 @@ const formatMoveNotationLabel = (notation: string) => {
 	return isCounterClockwise ? `${upper}'` : upper
 }
 
-const formatFaceDirectionTarget = (face: MobileFaceOption) =>
+const formatFaceDirectionTarget = (face: MobileTurnOption) =>
 	`已選面：${face.label}（再選轉動方向）`
 
 const raycaster = new THREE.Raycaster()
@@ -253,7 +265,7 @@ type MobileTurnMenuState =
 	}
 	| {
 		kind: 'edge-face'
-		options: [MobileEdgeFaceOption, MobileEdgeFaceOption]
+		options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption]
 	}
 	| {
 		kind: 'corner-face'
@@ -261,7 +273,7 @@ type MobileTurnMenuState =
 	}
 	| {
 		kind: 'face-direction'
-		face: MobileFaceOption
+		face: MobileTurnOption
 	}
 
 let pendingMobileTurn: MobileTurnMenuState | null = null
@@ -343,11 +355,13 @@ const showCenterDirectionMenu = (selection: CenterTurnSelection) => {
 	)
 }
 
-const showEdgeFaceMenu = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption]) => {
+const showEdgeFaceMenu = (
+	options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption],
+) => {
 	showMobileTurnMenu(
 		{ kind: 'edge-face', options },
-		formatFaceTarget(options),
-		[options[0].label, options[1].label],
+		formatEdgeTarget(options),
+		[options[0].label, options[1].label, options[2].label],
 	)
 }
 
@@ -356,13 +370,13 @@ const showCornerFaceMenu = (
 ) => {
 	showMobileTurnMenu(
 		{ kind: 'corner-face', options },
-		formatFaceTarget(options),
+		formatCornerTarget(options),
 		[options[0].label, options[1].label, options[2].label],
 	)
 }
 
 const showFaceDirectionMenu = (
-	face: MobileFaceOption,
+	face: MobileTurnOption,
 ) => {
 	const clockwiseNotation = resolveFaceTurnNotation(face.notation, true)
 	const counterClockwiseNotation = resolveFaceTurnNotation(face.notation, false)
@@ -468,7 +482,7 @@ const getStickerLabelByNotation = (mesh: THREE.Mesh) => {
 
 const getEdgeFaceOptionsFromMesh = (
 	mesh: THREE.Mesh,
-): [MobileEdgeFaceOption, MobileEdgeFaceOption] | null => {
+): [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption] | null => {
 	const position = getRoundedGridPosition(mesh)
 	if (!position) {
 		return null
@@ -476,6 +490,11 @@ const getEdgeFaceOptionsFromMesh = (
 
 	const targets = getEdgeFaceTargetsFromGridPosition(position)
 	if (!targets) {
+		return null
+	}
+
+	const middleLayerNotation = getMiddleLayerNotationFromGridPosition(position)
+	if (!middleLayerNotation) {
 		return null
 	}
 
@@ -496,7 +515,14 @@ const getEdgeFaceOptionsFromMesh = (
 		return null
 	}
 
-	return [options[0], options[1]]
+	return [
+		options[0],
+		options[1],
+		{
+			label: '中間層',
+			notation: middleLayerNotation,
+		},
+	]
 }
 
 const getCornerFaceOptionsFromMesh = (
@@ -550,9 +576,17 @@ const moveHistoryController = createMoveHistoryController<CubeletSnapshot[]>({
 	isAnimating: () => moveQueueController.isAnimating(),
 })
 
-const getLayerCubelets = (axis: Axis, layer: MoveConfig['layer']) => {
+const getLayerCubelets = (move: Move) => {
+	const { axis, layer, notation } = move
+
 	if (layer === 0) {
-		return cubelets
+		const lower = notation.toLowerCase()
+		if (lower === 'x' || lower === 'y' || lower === 'z') {
+			return cubelets
+		}
+
+		// M/E/S should rotate only the middle slice on the selected axis.
+		return cubelets.filter((cubelet) => Math.abs(cubelet.position[axis]) < 0.001)
 	}
 
 	const target = layer * gap
@@ -561,7 +595,7 @@ const getLayerCubelets = (axis: Axis, layer: MoveConfig['layer']) => {
 const rotateLayer = (move: Move, done: () => void) => {
 	const { axis, layer, clockwise, notation } = move
 
-	const targetCubelets = getLayerCubelets(axis, layer)
+	const targetCubelets = getLayerCubelets(move)
 	if (targetCubelets.length === 0) {
 		done()
 		return
@@ -879,6 +913,11 @@ mobileTurnOptionCButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
+		showFaceDirectionMenu(pendingMobileTurn.options[2])
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'edge-face') {
 		showFaceDirectionMenu(pendingMobileTurn.options[2])
 		return
 	}

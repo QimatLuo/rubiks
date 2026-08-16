@@ -6,11 +6,14 @@ import { getXyzAxisViewMarkup } from './view.ts'
 export {
 	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
+	getMiddleLayerNotationFromGridPosition,
 	resolveCenterTurnNotation,
 	resolveFaceTurnNotation,
 	type CenterTurnSelection,
 	type CornerFaceTarget,
 	type EdgeFaceTarget,
+	type MiddleLayerNotation,
+	type TurnNotation,
 } from './mobile.ts'
 
 type XyzFeature = {

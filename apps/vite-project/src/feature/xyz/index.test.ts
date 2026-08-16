@@ -5,6 +5,7 @@ import { createXyzFeature } from './index.ts'
 import {
 	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
+	getMiddleLayerNotationFromGridPosition,
 	resolveCenterTurnNotation,
 	resolveFaceTurnNotation,
 } from './mobile.ts'
@@ -97,4 +98,20 @@ Deno.test('resolveFaceTurnNotation maps direction to lowercase/uppercase face mo
 
 	assert(cw === 'u', 'clockwise should keep lowercase notation')
 	assert(ccw === 'U', 'counterclockwise should convert notation to uppercase')
+})
+
+Deno.test('getMiddleLayerNotationFromGridPosition resolves edge middle layer', () => {
+	assert(getMiddleLayerNotationFromGridPosition({ x: 0, y: 1, z: 1 }) === 'm', 'x=0 edge should map to M layer')
+	assert(getMiddleLayerNotationFromGridPosition({ x: 1, y: 0, z: -1 }) === 'e', 'y=0 edge should map to E layer')
+	assert(getMiddleLayerNotationFromGridPosition({ x: -1, y: 1, z: 0 }) === 's', 'z=0 edge should map to S layer')
+	assert(getMiddleLayerNotationFromGridPosition({ x: 1, y: 1, z: 1 }) === null, 'corner cubelet should not map to middle layer')
+	assert(getMiddleLayerNotationFromGridPosition({ x: 0, y: 1, z: 0 }) === null, 'center cubelet should not map to middle layer')
+})
+
+Deno.test('resolveFaceTurnNotation also supports middle-layer notation', () => {
+	const cw = resolveFaceTurnNotation('m', true)
+	const ccw = resolveFaceTurnNotation('m', false)
+
+	assert(cw === 'm', 'clockwise should keep lowercase middle-layer notation')
+	assert(ccw === 'M', 'counterclockwise should convert middle-layer notation to uppercase')
 })

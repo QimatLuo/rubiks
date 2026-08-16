@@ -27,11 +27,18 @@ Deno.test('createBaseMoveMap returns all face bindings', () => {
 	assert(moveMap.l.axis === 'x' && moveMap.l.layer === -1, 'l binding mismatch')
 	assert(moveMap.f.axis === 'z' && moveMap.f.layer === 1, 'f binding mismatch')
 	assert(moveMap.b.axis === 'z' && moveMap.b.layer === -1, 'b binding mismatch')
+	assert(moveMap.m.axis === 'x' && moveMap.m.layer === 0, 'm binding mismatch')
+	assert(moveMap.e.axis === 'y' && moveMap.e.layer === 0, 'e binding mismatch')
+	assert(moveMap.s.axis === 'z' && moveMap.s.layer === 0, 's binding mismatch')
 })
 
 Deno.test('getMoveAngle resolves clockwise and counter-clockwise angles', () => {
 	assertAlmostEquals(getMoveAngle('u', true), -Math.PI / 2)
 	assertAlmostEquals(getMoveAngle('u', false), Math.PI / 2)
+	assertAlmostEquals(getMoveAngle('m', true), Math.PI / 2)
+	assertAlmostEquals(getMoveAngle('m', false), -Math.PI / 2)
+	assertAlmostEquals(getMoveAngle('e', true), Math.PI / 2)
+	assertAlmostEquals(getMoveAngle('s', true), -Math.PI / 2)
 	assertAlmostEquals(getMoveAngle('X', true), -Math.PI / 2)
 	assertAlmostEquals(getMoveAngle('X', false), Math.PI / 2)
 })
