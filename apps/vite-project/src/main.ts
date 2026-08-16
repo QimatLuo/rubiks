@@ -46,13 +46,13 @@ app.innerHTML = `
 		</section>
 		<section class="control-panel" aria-label="互動選單">
 			<div class="control-toolbar">
-				<button id="help-toggle-button" class="help-toggle-button" type="button" aria-haspopup="dialog" aria-controls="help-panel" aria-expanded="false">
-					說明
-				</button>
-				<button id="scramble-button" type="button">打亂</button>
 				<button id="repeat-last-button" type="button">再一次</button>
 				<button id="history-prev-button" type="button">上一步</button>
 				<button id="history-next-button" type="button">下一步</button>
+				<button id="scramble-button" type="button">打亂</button>
+				<button id="help-toggle-button" class="help-toggle-button" type="button" aria-haspopup="dialog" aria-controls="help-panel" aria-expanded="false">
+					說明
+				</button>
 			</div>
 			<section class="move-history" aria-label="轉動歷史">
 				<div id="move-history-list" class="move-history-list"></div>
@@ -955,6 +955,11 @@ moveHistoryController.attachClickHandler()
 scrambleButton?.addEventListener('click', () => {
 	if (isInteractionMenuOpen()) {
 		setStatus('請先完成目前互動選單')
+		return
+	}
+
+	if (!globalThis.confirm('確定要打亂嗎？')) {
+		setStatus('已取消打亂')
 		return
 	}
 
