@@ -166,6 +166,9 @@ scene.add(fillLight)
 const cubeGroup = new THREE.Group()
 scene.add(cubeGroup)
 
+const workspaceGroup = new THREE.Group()
+scene.add(workspaceGroup)
+
 const cubelets: THREE.Mesh[] = []
 const baseMaterialHexByCubelet = new WeakMap<THREE.Mesh, number[]>()
 const unfocusedBrightnessScale = 0.5
@@ -173,6 +176,8 @@ const focusedBrightnessScale = 1.5
 let focusedCubelet: THREE.Mesh | null = null
 const cubeletSize = 0.95
 const gap = 1.05
+
+const workspaceMargin = 0.08
 
 const cubeBounds = new THREE.Box3(
 	new THREE.Vector3(-gap - cubeletSize / 2, -gap - cubeletSize / 2, -gap - cubeletSize / 2),
@@ -248,6 +253,35 @@ const roundedQuarterTurn = (angle: number) => {
 	const quarter = Math.PI / 2
 	return Math.round(angle / quarter) * quarter
 }
+
+const createFixedWorkspaceOutline = () => {
+	const minX = gap - cubeletSize / 2 - workspaceMargin
+	const maxX = gap + cubeletSize / 2 + workspaceMargin
+	const minY = -gap - cubeletSize / 2 - workspaceMargin
+	const maxY = gap + cubeletSize / 2 + workspaceMargin
+	const minZ = gap - cubeletSize / 2 - workspaceMargin
+	const maxZ = gap + cubeletSize / 2 + workspaceMargin
+
+	const width = maxX - minX
+	const height = maxY - minY
+	const depth = maxZ - minZ
+
+	const box = new THREE.BoxGeometry(width, height, depth)
+	const edges = new THREE.EdgesGeometry(box)
+	const outlineMaterial = new THREE.LineDashedMaterial({
+		color: '#ffffff',
+		dashSize: 0.13,
+		gapSize: 0.08,
+		transparent: true,
+		opacity: 0.95,
+	})
+	const outline = new THREE.LineSegments(edges, outlineMaterial)
+	outline.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
+	outline.computeLineDistances()
+	workspaceGroup.add(outline)
+}
+
+createFixedWorkspaceOutline()
 
 for (const x of [cubeBounds.min.x, cubeBounds.max.x]) {
 	for (const y of [cubeBounds.min.y, cubeBounds.max.y]) {
