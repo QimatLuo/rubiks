@@ -4,6 +4,13 @@ import {
 import type { MoveConfigMap } from '../moves/index.ts'
 import { getXyzAxisViewMarkup } from './view.ts'
 export {
+	buildCornerFaceMenuData,
+	buildEdgeFaceMenuData,
+	type MobileCornerFaceOptionModel,
+	type MobileEdgeFaceOptionModel,
+	type StickerFaceInfo,
+} from './menu-model.ts'
+export {
 	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
 	getMiddleLayerNotationFromGridPosition,

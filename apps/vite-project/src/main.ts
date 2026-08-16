@@ -15,6 +15,8 @@ import { createScrambleController } from './feature/scramble'
 import { registerRubiksDebug } from './feature/debug'
 import {
 	createXyzFeature,
+	buildCornerFaceMenuData,
+	buildEdgeFaceMenuData,
 	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
 	getMiddleLayerNotationFromGridPosition,
@@ -24,6 +26,7 @@ import {
 	type CornerFaceTarget,
 	type EdgeFaceTarget,
 	type MiddleLayerNotation,
+	type StickerFaceInfo,
 } from './feature/xyz'
 import {
 	createCubeStateAdapter,
@@ -211,11 +214,13 @@ const facePalette = {
 
 type MobileEdgeFaceOption = {
 	label: string
+	faceColor: string
 	notation: EdgeFaceTarget['notation']
 }
 
 type MobileCornerFaceOption = {
 	label: string
+	faceColor: string
 	notation: CornerFaceTarget['notation']
 }
 
@@ -234,24 +239,6 @@ const colorLabelByHex: Record<string, string> = {
 	[new THREE.Color(facePalette.down).getHexString()]: '白色',
 	[new THREE.Color(facePalette.front).getHexString()]: '綠色',
 	[new THREE.Color(facePalette.back).getHexString()]: '藍色',
-}
-
-const faceColorByNotation: Record<EdgeFaceTarget['notation'], string> = {
-	r: facePalette.right,
-	l: facePalette.left,
-	u: facePalette.up,
-	d: facePalette.down,
-	f: facePalette.front,
-	b: facePalette.back,
-}
-
-const colorLabelByNotation: Record<EdgeFaceTarget['notation'], string> = {
-	r: '橘色',
-	l: '紅色',
-	u: '黃色',
-	d: '白色',
-	f: '綠色',
-	b: '藍色',
 }
 
 const localFaceDescriptors: Array<{ materialIndex: number; normal: THREE.Vector3 }> = [
@@ -511,13 +498,6 @@ const setStatus = (_text: string) => {}
 
 const formatCenterTarget = (colorLabel: string) => colorLabel
 
-const formatEdgeTarget = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption]) =>
-	`${options[0].label.replace(/面$/, '')}/${options[1].label.replace(/面$/, '')}`
-
-const formatCornerTarget = (
-	options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
-) => options.map((option) => option.label.replace(/面$/, '')).join('/')
-
 const formatMoveNotationLabel = (notation: string) => {
 	const upper = notation.toUpperCase()
 	const isCounterClockwise = notation !== notation.toLowerCase()
@@ -591,13 +571,16 @@ type MobileTurnMenuState =
 	| {
 		kind: 'center-direction'
 		selection: CenterTurnSelection
+		colorLabel: string
 	}
 	| {
 		kind: 'edge-face'
+		targetText: string
 		options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption]
 	}
 	| {
 		kind: 'corner-face'
+		targetText: string
 		options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption]
 	}
 	| {
@@ -679,11 +662,11 @@ const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
 	if (state.kind === 'edge-face') {
 		setMobileTurnButtonFaceStyle(
 			mobileTurnOptionAButton,
-			faceColorByNotation[state.options[0].notation],
+			state.options[0].faceColor,
 		)
 		setMobileTurnButtonFaceStyle(
 			mobileTurnOptionBButton,
-			faceColorByNotation[state.options[1].notation],
+			state.options[1].faceColor,
 		)
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionCButton)
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionDButton)
@@ -693,15 +676,15 @@ const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
 	if (state.kind === 'corner-face') {
 		setMobileTurnButtonFaceStyle(
 			mobileTurnOptionAButton,
-			faceColorByNotation[state.options[0].notation],
+			state.options[0].faceColor,
 		)
 		setMobileTurnButtonFaceStyle(
 			mobileTurnOptionBButton,
-			faceColorByNotation[state.options[1].notation],
+			state.options[1].faceColor,
 		)
 		setMobileTurnButtonFaceStyle(
 			mobileTurnOptionCButton,
-			faceColorByNotation[state.options[2].notation],
+			state.options[2].faceColor,
 		)
 		clearMobileTurnButtonFaceStyle(mobileTurnOptionDButton)
 		return
@@ -799,7 +782,7 @@ const showCenterDirectionMenu = (selection: CenterTurnSelection, colorLabel: str
 	const faceCounterClockwiseNotation = resolveFaceTurnNotation(centerFaceNotation, false)
 
 	showMobileTurnMenu(
-		{ kind: 'center-direction', selection },
+		{ kind: 'center-direction', selection, colorLabel },
 		formatCenterTarget(colorLabel),
 		[
 			formatMoveNotationLabel(centerClockwiseNotation),
@@ -813,13 +796,14 @@ const showCenterDirectionMenu = (selection: CenterTurnSelection, colorLabel: str
 
 const showEdgeFaceMenu = (
 	options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption],
+	targetText: string,
 ) => {
 	showMobileTurnMenu(
-		{ kind: 'edge-face', options },
-		formatEdgeTarget(options),
+		{ kind: 'edge-face', options, targetText },
+		targetText,
 		[
-			`${colorLabelByNotation[options[0].notation]}面`,
-			`${colorLabelByNotation[options[1].notation]}面`,
+			options[0].label,
+			options[1].label,
 			options[2].label,
 		],
 		false,
@@ -828,14 +812,15 @@ const showEdgeFaceMenu = (
 
 const showCornerFaceMenu = (
 	options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
+	targetText: string,
 ) => {
 	showMobileTurnMenu(
-		{ kind: 'corner-face', options },
-		formatCornerTarget(options),
+		{ kind: 'corner-face', options, targetText },
+		targetText,
 		[
-			`${colorLabelByNotation[options[0].notation]}面`,
-			`${colorLabelByNotation[options[1].notation]}面`,
-			`${colorLabelByNotation[options[2].notation]}面`,
+			options[0].label,
+			options[1].label,
+			options[2].label,
 		],
 		false,
 	)
@@ -930,8 +915,8 @@ const getFaceNotationFromWorldNormal = (normal: THREE.Vector3): EdgeFaceTarget['
 	return normal.z >= 0 ? 'f' : 'b'
 }
 
-const getStickerLabelByNotation = (mesh: THREE.Mesh) => {
-	const result: Partial<Record<EdgeFaceTarget['notation'], string>> = {}
+const getStickerFaceInfoByNotation = (mesh: THREE.Mesh) => {
+	const result: Partial<Record<EdgeFaceTarget['notation'], StickerFaceInfo>> = {}
 	const materials = Array.isArray(mesh.material) ? mesh.material : null
 	if (!materials) {
 		return result
@@ -955,7 +940,31 @@ const getStickerLabelByNotation = (mesh: THREE.Mesh) => {
 			continue
 		}
 
-		result[notation] = label
+		result[notation] = {
+			label,
+			faceColor: `#${material.color.getHexString()}`,
+		}
+	}
+
+	return result
+}
+
+const getCenterFaceInfoByNotation = () => {
+	const result: Partial<Record<EdgeFaceTarget['notation'], StickerFaceInfo>> = {}
+
+	for (const cubelet of cubelets) {
+		const selection = getCenterTurnSelectionFromMesh(cubelet)
+		if (!selection) {
+			continue
+		}
+
+		const centerNotation = getFaceNotationFromCenterSelection(selection)
+		const faceInfo = getStickerFaceInfoByNotation(cubelet)[centerNotation]
+		if (!faceInfo) {
+			continue
+		}
+
+		result[centerNotation] = faceInfo
 	}
 
 	return result
@@ -963,7 +972,10 @@ const getStickerLabelByNotation = (mesh: THREE.Mesh) => {
 
 const getEdgeFaceOptionsFromMesh = (
 	mesh: THREE.Mesh,
-): [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption] | null => {
+): {
+	targetText: string
+	options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption]
+} | null => {
 	const position = getRoundedGridPosition(mesh)
 	if (!position) {
 		return null
@@ -979,36 +991,20 @@ const getEdgeFaceOptionsFromMesh = (
 		return null
 	}
 
-	const labelByNotation = getStickerLabelByNotation(mesh)
-	const options = targets.map((target) => {
-		const label = labelByNotation[target.notation]
-		if (!label) {
-			return null
-		}
-
-		return {
-			label: `${label}面`,
-			notation: target.notation,
-		}
+	return buildEdgeFaceMenuData({
+		targets,
+		pieceFaceInfoByNotation: getStickerFaceInfoByNotation(mesh),
+		centerFaceInfoByNotation: getCenterFaceInfoByNotation(),
+		middleLayerNotation,
 	})
-
-	if (options[0] === null || options[1] === null) {
-		return null
-	}
-
-	return [
-		options[0],
-		options[1],
-		{
-			label: '中間層',
-			notation: middleLayerNotation,
-		},
-	]
 }
 
 const getCornerFaceOptionsFromMesh = (
 	mesh: THREE.Mesh,
-): [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption] | null => {
+): {
+	targetText: string
+	options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption]
+} | null => {
 	const position = getRoundedGridPosition(mesh)
 	if (!position) {
 		return null
@@ -1019,24 +1015,11 @@ const getCornerFaceOptionsFromMesh = (
 		return null
 	}
 
-	const labelByNotation = getStickerLabelByNotation(mesh)
-	const options = targets.map((target) => {
-		const label = labelByNotation[target.notation]
-		if (!label) {
-			return null
-		}
-
-		return {
-			label: `${label}面`,
-			notation: target.notation,
-		}
+	return buildCornerFaceMenuData({
+		targets,
+		pieceFaceInfoByNotation: getStickerFaceInfoByNotation(mesh),
+		centerFaceInfoByNotation: getCenterFaceInfoByNotation(),
 	})
-
-	if (options[0] === null || options[1] === null || options[2] === null) {
-		return null
-	}
-
-	return [options[0], options[1], options[2]]
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -1587,18 +1570,17 @@ mobileTurnBackButton?.addEventListener('click', () => {
 	}
 
 	if (previousState.kind === 'center-direction') {
-		const centerFaceNotation = getFaceNotationFromCenterSelection(previousState.selection)
-		showCenterDirectionMenu(previousState.selection, colorLabelByNotation[centerFaceNotation])
+		showCenterDirectionMenu(previousState.selection, previousState.colorLabel)
 		return
 	}
 
 	if (previousState.kind === 'edge-face') {
-		showEdgeFaceMenu(previousState.options)
+		showEdgeFaceMenu(previousState.options, previousState.targetText)
 		return
 	}
 
 	if (previousState.kind === 'corner-face') {
-		showCornerFaceMenu(previousState.options)
+		showCornerFaceMenu(previousState.options, previousState.targetText)
 		return
 	}
 
@@ -1648,7 +1630,7 @@ renderer.domElement.addEventListener('click', (event) => {
 	const selection = getCenterTurnSelectionFromMesh(hitMesh)
 	if (selection) {
 		const centerFaceNotation = getFaceNotationFromCenterSelection(selection)
-		const colorLabel = getStickerLabelByNotation(hitMesh)[centerFaceNotation]
+		const colorLabel = getStickerFaceInfoByNotation(hitMesh)[centerFaceNotation]?.label
 		if (!colorLabel) {
 			return
 		}
@@ -1661,7 +1643,7 @@ renderer.domElement.addEventListener('click', (event) => {
 	const edgeOptions = getEdgeFaceOptionsFromMesh(hitMesh)
 	if (edgeOptions) {
 		applyCubeletFocusState(hitMesh)
-		showEdgeFaceMenu(edgeOptions)
+		showEdgeFaceMenu(edgeOptions.options, edgeOptions.targetText)
 		return
 	}
 
@@ -1671,7 +1653,7 @@ renderer.domElement.addEventListener('click', (event) => {
 	}
 
 	applyCubeletFocusState(hitMesh)
-	showCornerFaceMenu(cornerOptions)
+	showCornerFaceMenu(cornerOptions.options, cornerOptions.targetText)
 })
 
 registerMoveKeyboard({ moveMap, enqueueMoveByNotation })
