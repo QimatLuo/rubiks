@@ -13,7 +13,11 @@ import {
 } from './feature/moves'
 import { createScrambleController } from './feature/scramble'
 import { registerRubiksDebug } from './feature/debug'
-import { createXyzFeature } from './feature/xyz'
+import {
+	createXyzFeature,
+	resolveCenterTurnNotation,
+	type CenterTurnSelection,
+} from './feature/xyz'
 import {
 	createCubeStateAdapter,
 	createMoveHistoryController,
@@ -35,6 +39,7 @@ app.innerHTML = `
 				<h1>Rubik's Cube</h1>
 				<p>按小寫順時針，按大寫逆時針</p>
 				<p>U D L R F B 對應六個面</p>
+				<p>點中心塊可選順轉、逆轉、取消</p>
 				<button id="scramble-button" type="button">打亂</button>
 				<p id="move-status">狀態：待命</p>
 			</div>
@@ -44,11 +49,29 @@ app.innerHTML = `
 		</div>
 		${xyzFeature.renderView()}
 	</div>
+	<div id="center-turn-menu" class="center-turn-menu" hidden>
+		<div class="center-turn-card" role="dialog" aria-modal="true" aria-labelledby="center-turn-title">
+			<h2 id="center-turn-title">中心塊轉動</h2>
+			<p id="center-turn-target" class="center-turn-target">請選擇轉動方向</p>
+			<div class="center-turn-actions">
+				<button id="center-turn-clockwise" type="button">順轉</button>
+				<button id="center-turn-counterclockwise" type="button">逆轉</button>
+				<button id="center-turn-cancel" type="button">取消</button>
+			</div>
+		</div>
+	</div>
 `
 
 const statusEl = document.querySelector<HTMLParagraphElement>('#move-status')
 const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
 const historyListEl = document.querySelector<HTMLDivElement>('#move-history-list')
+const centerTurnMenuEl = document.querySelector<HTMLDivElement>('#center-turn-menu')
+const centerTurnTargetEl = document.querySelector<HTMLParagraphElement>('#center-turn-target')
+const centerTurnClockwiseButton = document.querySelector<HTMLButtonElement>('#center-turn-clockwise')
+const centerTurnCounterclockwiseButton = document.querySelector<HTMLButtonElement>(
+	'#center-turn-counterclockwise',
+)
+const centerTurnCancelButton = document.querySelector<HTMLButtonElement>('#center-turn-cancel')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio, 2))
@@ -130,6 +153,65 @@ const setStatus = (text: string) => {
 		return
 	}
 	statusEl.textContent = `狀態：${text}`
+}
+
+const formatCenterTarget = (selection: CenterTurnSelection) => {
+	const label = `${selection.sign === 1 ? '+' : '-'}${selection.axis.toUpperCase()}`
+	return `已選中心塊：${label}`
+}
+
+const raycaster = new THREE.Raycaster()
+const pointer = new THREE.Vector2()
+let pendingCenterTurn: CenterTurnSelection | null = null
+
+const hideCenterTurnMenu = () => {
+	if (!centerTurnMenuEl) {
+		return
+	}
+
+	centerTurnMenuEl.hidden = true
+	pendingCenterTurn = null
+}
+
+const showCenterTurnMenu = (selection: CenterTurnSelection) => {
+	if (!centerTurnMenuEl) {
+		return
+	}
+
+	pendingCenterTurn = selection
+	if (centerTurnTargetEl) {
+		centerTurnTargetEl.textContent = formatCenterTarget(selection)
+	}
+	centerTurnMenuEl.hidden = false
+}
+
+const getRoundedGridCoord = (value: number) => {
+	const normalized = Math.round(value / gap)
+	return Math.abs(value - normalized * gap) < 0.001 ? normalized : null
+}
+
+const getCenterTurnSelectionFromMesh = (mesh: THREE.Mesh): CenterTurnSelection | null => {
+	const rx = getRoundedGridCoord(mesh.position.x)
+	const ry = getRoundedGridCoord(mesh.position.y)
+	const rz = getRoundedGridCoord(mesh.position.z)
+
+	if (rx === null || ry === null || rz === null) {
+		return null
+	}
+
+	if (Math.abs(rx) === 1 && ry === 0 && rz === 0) {
+		return { axis: 'x', sign: rx as 1 | -1 }
+	}
+
+	if (Math.abs(ry) === 1 && rx === 0 && rz === 0) {
+		return { axis: 'y', sign: ry as 1 | -1 }
+	}
+
+	if (Math.abs(rz) === 1 && rx === 0 && ry === 0) {
+		return { axis: 'z', sign: rz as 1 | -1 }
+	}
+
+	return null
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -324,6 +406,59 @@ moveHistoryController.attachClickHandler()
 
 scrambleButton?.addEventListener('click', () => {
 	scrambleController.triggerScramble()
+})
+
+centerTurnClockwiseButton?.addEventListener('click', () => {
+	if (!pendingCenterTurn) {
+		hideCenterTurnMenu()
+		return
+	}
+
+	enqueueMoveByNotation(resolveCenterTurnNotation(pendingCenterTurn, true))
+	hideCenterTurnMenu()
+})
+
+centerTurnCounterclockwiseButton?.addEventListener('click', () => {
+	if (!pendingCenterTurn) {
+		hideCenterTurnMenu()
+		return
+	}
+
+	enqueueMoveByNotation(resolveCenterTurnNotation(pendingCenterTurn, false))
+	hideCenterTurnMenu()
+})
+
+centerTurnCancelButton?.addEventListener('click', () => {
+	hideCenterTurnMenu()
+})
+
+centerTurnMenuEl?.addEventListener('click', (event) => {
+	if (event.target === centerTurnMenuEl) {
+		hideCenterTurnMenu()
+	}
+})
+
+renderer.domElement.addEventListener('click', (event) => {
+	const rect = renderer.domElement.getBoundingClientRect()
+	pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+	pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+	raycaster.setFromCamera(pointer, camera)
+	const intersects = raycaster.intersectObjects(cubelets, false)
+	if (intersects.length === 0) {
+		return
+	}
+
+	const selection = intersects
+		.map((hit) => hit.object)
+		.filter((object): object is THREE.Mesh => object instanceof THREE.Mesh)
+		.map((mesh) => getCenterTurnSelectionFromMesh(mesh))
+		.find((candidate): candidate is CenterTurnSelection => candidate !== null)
+	if (!selection) {
+		return
+	}
+
+	showCenterTurnMenu(selection)
 })
 
 registerMoveKeyboard({ moveMap, enqueueMoveByNotation })

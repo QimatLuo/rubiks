@@ -40,6 +40,7 @@ canvas {
 	align-items: flex-start;
 	gap: 0.55rem;
 	width: 100%;
+	pointer-events: none;
 }
 
 .hud-stack {
@@ -52,6 +53,7 @@ canvas {
 	flex-direction: column;
 	align-items: flex-start;
 	gap: 0.5rem;
+	pointer-events: none;
 }
 
 .hud h1 {
@@ -64,6 +66,12 @@ canvas {
 	margin: 0.25rem 0;
 	font-size: 0.9rem;
 	color: #cbd5e1;
+}
+
+.hud,
+.axis-view,
+.move-history {
+	pointer-events: none;
 }
 
 .axis-view {
@@ -132,6 +140,7 @@ canvas {
 	cursor: pointer;
 	touch-action: manipulation;
 	transition: background-color 140ms ease;
+	pointer-events: auto;
 }
 
 .move-history {
@@ -170,6 +179,7 @@ canvas {
 	line-height: 1.15;
 	cursor: pointer;
 	transition: background-color 120ms ease, border-color 120ms ease;
+	pointer-events: auto;
 }
 
 .history-item:hover {
@@ -189,6 +199,66 @@ canvas {
 
 #scramble-button:active {
 	background: rgba(71, 85, 105, 0.95);
+}
+
+.center-turn-menu {
+	position: fixed;
+	inset: 0;
+	z-index: 5;
+	display: grid;
+	place-items: center;
+	padding: 1rem;
+	background: rgba(2, 6, 23, 0.45);
+	backdrop-filter: blur(3px);
+}
+
+.center-turn-menu[hidden] {
+	display: none;
+}
+
+.center-turn-card {
+	width: min(90vw, 22rem);
+	border: 1px solid rgba(148, 163, 184, 0.5);
+	border-radius: 0.9rem;
+	background: rgba(15, 23, 42, 0.95);
+	padding: 0.9rem;
+	box-shadow: 0 14px 30px rgba(2, 6, 23, 0.45);
+}
+
+.center-turn-card h2 {
+	margin: 0;
+	font-size: 1rem;
+	letter-spacing: 0.03em;
+}
+
+.center-turn-target {
+	margin: 0.45rem 0 0;
+	font-size: 0.9rem;
+	color: #cbd5e1;
+}
+
+.center-turn-actions {
+	margin-top: 0.8rem;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.5rem;
+}
+
+.center-turn-actions button {
+	padding: 0.55rem 0.35rem;
+	border-radius: 0.55rem;
+	border: 1px solid rgba(148, 163, 184, 0.5);
+	background: rgba(30, 41, 59, 0.82);
+	color: #e2e8f0;
+	font-family: inherit;
+	font-size: 0.88rem;
+	cursor: pointer;
+	touch-action: manipulation;
+	transition: background-color 140ms ease;
+}
+
+.center-turn-actions button:hover {
+	background: rgba(51, 65, 85, 0.92);
 }
 
 @media (max-width: 640px) {
@@ -218,5 +288,9 @@ canvas {
 
 	.axis-view svg {
 		max-width: 7.5rem;
+	}
+
+	.center-turn-actions {
+		grid-template-columns: 1fr;
 	}
 }

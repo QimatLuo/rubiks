@@ -3,6 +3,7 @@ import {
 } from './keyboard.ts'
 import type { MoveConfigMap } from '../moves/index.ts'
 import { getXyzAxisViewMarkup } from './view.ts'
+export { resolveCenterTurnNotation, type CenterTurnSelection } from './mobile.ts'
 
 type XyzFeature = {
 	renderView: () => string
