@@ -224,15 +224,6 @@ const faceColorByNotation: Record<EdgeFaceTarget['notation'], string> = {
 	b: facePalette.back,
 }
 
-const faceColorByLabel: Record<string, string> = {
-	橘色: facePalette.right,
-	紅色: facePalette.left,
-	黃色: facePalette.up,
-	白色: facePalette.down,
-	綠色: facePalette.front,
-	藍色: facePalette.back,
-}
-
 const colorLabelByNotation: Record<EdgeFaceTarget['notation'], string> = {
 	r: '橘色',
 	l: '紅色',
@@ -461,20 +452,6 @@ const hideMobileTurnMenu = () => {
 	syncMobileTurnNavButtonState()
 }
 
-const getFaceColorByLabelText = (text: string | null | undefined) => {
-	if (!text) {
-		return null
-	}
-
-	for (const [label, color] of Object.entries(faceColorByLabel)) {
-		if (text.includes(label)) {
-			return color
-		}
-	}
-
-	return null
-}
-
 const clearMobileTurnButtonFaceStyle = (button: HTMLButtonElement | null) => {
 	if (!button) {
 		return
@@ -506,19 +483,43 @@ const setMobileTurnButtonFaceStyle = (
 	button.style.color = luminance > 0.66 ? '#0f172a' : '#f8fafc'
 }
 
-const applyMobileTurnMenuButtonColors = () => {
-	setMobileTurnButtonFaceStyle(
-		mobileTurnOptionAButton,
-		getFaceColorByLabelText(mobileTurnOptionAButton?.textContent),
-	)
-	setMobileTurnButtonFaceStyle(
-		mobileTurnOptionBButton,
-		getFaceColorByLabelText(mobileTurnOptionBButton?.textContent),
-	)
-	setMobileTurnButtonFaceStyle(
-		mobileTurnOptionCButton,
-		getFaceColorByLabelText(mobileTurnOptionCButton?.textContent),
-	)
+const applyMobileTurnMenuButtonColors = (state: MobileTurnMenuState) => {
+	const clearAllButtons = () => {
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionAButton)
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionBButton)
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionCButton)
+	}
+
+	if (state.kind === 'edge-face') {
+		setMobileTurnButtonFaceStyle(
+			mobileTurnOptionAButton,
+			faceColorByNotation[state.options[0].notation],
+		)
+		setMobileTurnButtonFaceStyle(
+			mobileTurnOptionBButton,
+			faceColorByNotation[state.options[1].notation],
+		)
+		clearMobileTurnButtonFaceStyle(mobileTurnOptionCButton)
+		return
+	}
+
+	if (state.kind === 'corner-face') {
+		setMobileTurnButtonFaceStyle(
+			mobileTurnOptionAButton,
+			faceColorByNotation[state.options[0].notation],
+		)
+		setMobileTurnButtonFaceStyle(
+			mobileTurnOptionBButton,
+			faceColorByNotation[state.options[1].notation],
+		)
+		setMobileTurnButtonFaceStyle(
+			mobileTurnOptionCButton,
+			faceColorByNotation[state.options[2].notation],
+		)
+		return
+	}
+
+	clearAllButtons()
 }
 
 const setHelpExpandedState = (expanded: boolean) => {
@@ -580,7 +581,7 @@ const showMobileTurnMenu = (
 			mobileTurnOptionCButton.hidden = true
 		}
 	}
-	applyMobileTurnMenuButtonColors()
+	applyMobileTurnMenuButtonColors(state)
 	mobileTurnMenuEl.hidden = false
 }
 
@@ -605,7 +606,11 @@ const showEdgeFaceMenu = (
 	showMobileTurnMenu(
 		{ kind: 'edge-face', options },
 		formatEdgeTarget(options),
-		[options[0].label, options[1].label, options[2].label],
+		[
+			`${colorLabelByNotation[options[0].notation]}面`,
+			`${colorLabelByNotation[options[1].notation]}面`,
+			options[2].label,
+		],
 		false,
 	)
 }
@@ -616,7 +621,11 @@ const showCornerFaceMenu = (
 	showMobileTurnMenu(
 		{ kind: 'corner-face', options },
 		formatCornerTarget(options),
-		[options[0].label, options[1].label, options[2].label],
+		[
+			`${colorLabelByNotation[options[0].notation]}面`,
+			`${colorLabelByNotation[options[1].notation]}面`,
+			`${colorLabelByNotation[options[2].notation]}面`,
+		],
 		false,
 	)
 }
