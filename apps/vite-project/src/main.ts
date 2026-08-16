@@ -144,6 +144,10 @@ const cubeGroup = new THREE.Group()
 scene.add(cubeGroup)
 
 const cubelets: THREE.Mesh[] = []
+const baseMaterialHexByCubelet = new WeakMap<THREE.Mesh, number[]>()
+const unfocusedBrightnessScale = 0.5
+const focusedBrightnessScale = 1.5
+let focusedCubelet: THREE.Mesh | null = null
 const cubeletSize = 0.95
 const gap = 1.05
 
@@ -253,10 +257,52 @@ for (let x = -1; x <= 1; x += 1) {
 			]
 
 			const cubelet = new THREE.Mesh(geometry, materials)
+			baseMaterialHexByCubelet.set(
+				cubelet,
+				materials.map((material) => material.color.getHex()),
+			)
 			cubelet.position.set(x * gap, y * gap, z * gap)
 			cubeGroup.add(cubelet)
 			cubelets.push(cubelet)
 		}
+	}
+}
+
+const setCubeletBrightnessState = (cubelet: THREE.Mesh, brightnessScale: number | null) => {
+	const materials = Array.isArray(cubelet.material) ? cubelet.material : null
+	const baseHexes = baseMaterialHexByCubelet.get(cubelet)
+	if (!materials || !baseHexes) {
+		return
+	}
+
+	for (let index = 0; index < materials.length; index += 1) {
+		const material = materials[index]
+		if (!(material instanceof THREE.MeshStandardMaterial)) {
+			continue
+		}
+
+		material.color.setHex(baseHexes[index])
+		if (brightnessScale !== null) {
+			material.color.multiplyScalar(brightnessScale)
+		}
+	}
+}
+
+const applyCubeletFocusState = (cubelet: THREE.Mesh | null) => {
+	focusedCubelet = cubelet
+
+	for (const currentCubelet of cubelets) {
+		if (focusedCubelet === null) {
+			setCubeletBrightnessState(currentCubelet, null)
+			continue
+		}
+
+		if (currentCubelet === focusedCubelet) {
+			setCubeletBrightnessState(currentCubelet, focusedBrightnessScale)
+			continue
+		}
+
+		setCubeletBrightnessState(currentCubelet, unfocusedBrightnessScale)
 	}
 }
 
@@ -388,6 +434,7 @@ const hideMobileTurnMenu = () => {
 	}
 
 	mobileTurnMenuEl.hidden = true
+	applyCubeletFocusState(null)
 	pendingMobileTurn = null
 	mobileTurnMenuTrail.length = 0
 	syncMobileTurnNavButtonState()
@@ -1244,12 +1291,14 @@ renderer.domElement.addEventListener('click', (event) => {
 			return
 		}
 
+		applyCubeletFocusState(hitMesh)
 		showCenterDirectionMenu(selection, colorLabel)
 		return
 	}
 
 	const edgeOptions = getEdgeFaceOptionsFromMesh(hitMesh)
 	if (edgeOptions) {
+		applyCubeletFocusState(hitMesh)
 		showEdgeFaceMenu(edgeOptions)
 		return
 	}
@@ -1259,6 +1308,7 @@ renderer.domElement.addEventListener('click', (event) => {
 		return
 	}
 
+	applyCubeletFocusState(hitMesh)
 	showCornerFaceMenu(cornerOptions)
 })
 
