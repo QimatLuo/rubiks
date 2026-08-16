@@ -38,60 +38,83 @@ if (!app) {
 const xyzFeature = createXyzFeature()
 
 app.innerHTML = `
-	<div class="hud-stack">
-		<div class="hud-layout">
+	<div class="app-shell">
+		<section class="cube-panel" aria-label="魔術方塊視窗">
+			<div id="cube-stage" class="cube-stage"></div>
+		</section>
+		<section class="control-panel" aria-label="互動選單">
+			<div class="control-toolbar">
+				<button id="help-toggle-button" class="help-toggle-button" type="button" aria-haspopup="dialog" aria-controls="help-panel" aria-expanded="false">
+					說明
+				</button>
+				<button id="scramble-button" type="button">打亂</button>
+			</div>
+			<section class="move-history" aria-label="轉動歷史">
+				<div id="move-history-list" class="move-history-list"></div>
+			</section>
+			<div id="mobile-turn-menu" class="center-turn-menu" hidden>
+				<div class="center-turn-card" role="dialog" aria-modal="true" aria-labelledby="mobile-turn-title">
+					<h2 id="mobile-turn-title">手機轉動</h2>
+					<p id="mobile-turn-target" class="center-turn-target">請選擇操作</p>
+					<div class="center-turn-actions">
+						<button id="mobile-turn-option-a" type="button">選項一</button>
+						<button id="mobile-turn-option-b" type="button">選項二</button>
+						<button id="mobile-turn-option-c" type="button">選項三</button>
+					</div>
+				</div>
+			</div>
+		</section>
+	</div>
+	<div id="help-panel" class="help-panel" hidden>
+		<div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
+			<div class="help-card-header">
+				<h2 id="help-title">操作說明</h2>
+				<button id="help-close-button" class="help-close-button" type="button" aria-label="關閉說明">關閉</button>
+			</div>
 			<div class="hud">
 				<h1>Rubik's Cube</h1>
 				<p>按小寫順時針，按大寫逆時針</p>
 				<p>U D L R F B 對應六個面</p>
 				<p>手機點中心塊、邊塊或角塊可操作轉動</p>
-				<button id="scramble-button" type="button">打亂</button>
-				<p id="move-status">狀態：待命</p>
 			</div>
-			<section class="move-history" aria-label="轉動歷史">
-				<div id="move-history-list" class="move-history-list"></div>
-			</section>
-		</div>
-		${xyzFeature.renderView()}
-	</div>
-	<div id="mobile-turn-menu" class="center-turn-menu" hidden>
-		<div class="center-turn-card" role="dialog" aria-modal="true" aria-labelledby="mobile-turn-title">
-			<h2 id="mobile-turn-title">手機轉動</h2>
-			<p id="mobile-turn-target" class="center-turn-target">請選擇操作</p>
-			<div class="center-turn-actions">
-				<button id="mobile-turn-option-a" type="button">選項一</button>
-				<button id="mobile-turn-option-b" type="button">選項二</button>
-				<button id="mobile-turn-option-c" type="button">取消</button>
-			</div>
+			${xyzFeature.renderView()}
 		</div>
 	</div>
 `
 
-const statusEl = document.querySelector<HTMLParagraphElement>('#move-status')
 const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
 const historyListEl = document.querySelector<HTMLDivElement>('#move-history-list')
+const helpToggleButton = document.querySelector<HTMLButtonElement>('#help-toggle-button')
+const helpCloseButton = document.querySelector<HTMLButtonElement>('#help-close-button')
+const helpPanelEl = document.querySelector<HTMLDivElement>('#help-panel')
 const mobileTurnMenuEl = document.querySelector<HTMLDivElement>('#mobile-turn-menu')
 const mobileTurnTargetEl = document.querySelector<HTMLParagraphElement>('#mobile-turn-target')
 const mobileTurnOptionAButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-a')
 const mobileTurnOptionBButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-b')
 const mobileTurnOptionCButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-c')
+const cubeStageEl = document.querySelector<HTMLDivElement>('#cube-stage')
+
+if (!cubeStageEl) {
+	throw new Error('Missing #cube-stage container')
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio, 2))
-renderer.setSize(globalThis.innerWidth, globalThis.innerHeight)
-app.appendChild(renderer.domElement)
+renderer.setSize(cubeStageEl.clientWidth, cubeStageEl.clientHeight)
+cubeStageEl.appendChild(renderer.domElement)
 
 const scene = new THREE.Scene()
 scene.background = new THREE.Color('#0f172a')
 
 const camera = new THREE.PerspectiveCamera(
 	45,
-	globalThis.innerWidth / globalThis.innerHeight,
+	cubeStageEl.clientWidth / cubeStageEl.clientHeight,
 	0.1,
 	100,
 )
 camera.position.set(6, 6, 7)
 camera.lookAt(0, 0, 0)
+const cameraDirection = camera.position.clone().normalize()
 
 const ambientLight = new THREE.AmbientLight('#ffffff', 0.65)
 scene.add(ambientLight)
@@ -110,6 +133,12 @@ scene.add(cubeGroup)
 const cubelets: THREE.Mesh[] = []
 const cubeletSize = 0.95
 const gap = 1.05
+
+const cubeBounds = new THREE.Box3(
+	new THREE.Vector3(-gap - cubeletSize / 2, -gap - cubeletSize / 2, -gap - cubeletSize / 2),
+	new THREE.Vector3(gap + cubeletSize / 2, gap + cubeletSize / 2, gap + cubeletSize / 2),
+)
+const cubeCorners: THREE.Vector3[] = []
 
 const facePalette = {
 	right: '#f97316',
@@ -156,6 +185,14 @@ const roundedQuarterTurn = (angle: number) => {
 	return Math.round(angle / quarter) * quarter
 }
 
+for (const x of [cubeBounds.min.x, cubeBounds.max.x]) {
+	for (const y of [cubeBounds.min.y, cubeBounds.max.y]) {
+		for (const z of [cubeBounds.min.z, cubeBounds.max.z]) {
+			cubeCorners.push(new THREE.Vector3(x, y, z))
+		}
+	}
+}
+
 for (let x = -1; x <= 1; x += 1) {
 	for (let y = -1; y <= 1; y += 1) {
 		for (let z = -1; z <= 1; z += 1) {
@@ -181,12 +218,7 @@ const moveMap = createBaseMoveMap()
 
 xyzFeature.registerMoveBindings(moveMap)
 
-const setStatus = (text: string) => {
-	if (!statusEl) {
-		return
-	}
-	statusEl.textContent = `狀態：${text}`
-}
+const setStatus = (_text: string) => {}
 
 const formatCenterTarget = (selection: CenterTurnSelection) => {
 	const label = `${selection.sign === 1 ? '+' : '-'}${selection.axis.toUpperCase()}`
@@ -196,8 +228,14 @@ const formatCenterTarget = (selection: CenterTurnSelection) => {
 const formatFaceTarget = (options: MobileFaceOption[]) =>
 	`已選${options.length === 2 ? '邊塊' : '角塊'}：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
 
+const formatMoveNotationLabel = (notation: string) => {
+	const upper = notation.toUpperCase()
+	const isCounterClockwise = notation !== notation.toLowerCase()
+	return isCounterClockwise ? `${upper}'` : upper
+}
+
 const formatFaceDirectionTarget = (face: MobileFaceOption) =>
-	`已選面：${face.label}（再選順轉或逆轉）`
+	`已選面：${face.label}（再選轉動方向）`
 
 const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
@@ -218,12 +256,11 @@ type MobileTurnMenuState =
 	| {
 		kind: 'face-direction'
 		face: MobileFaceOption
-		previousOptions:
-			| [MobileEdgeFaceOption, MobileEdgeFaceOption]
-			| [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption]
 	}
 
 let pendingMobileTurn: MobileTurnMenuState | null = null
+
+const isInteractionMenuOpen = () => pendingMobileTurn !== null
 
 const hideMobileTurnMenu = () => {
 	if (!mobileTurnMenuEl) {
@@ -234,10 +271,32 @@ const hideMobileTurnMenu = () => {
 	pendingMobileTurn = null
 }
 
+const setHelpExpandedState = (expanded: boolean) => {
+	helpToggleButton?.setAttribute('aria-expanded', expanded ? 'true' : 'false')
+}
+
+const hideHelpPanel = () => {
+	if (!helpPanelEl) {
+		return
+	}
+
+	helpPanelEl.hidden = true
+	setHelpExpandedState(false)
+}
+
+const showHelpPanel = () => {
+	if (!helpPanelEl) {
+		return
+	}
+
+	helpPanelEl.hidden = false
+	setHelpExpandedState(true)
+}
+
 const showMobileTurnMenu = (
 	state: MobileTurnMenuState,
 	targetText: string,
-	labels: [string, string, string],
+	labels: [string, string] | [string, string, string],
 ) => {
 	if (!mobileTurnMenuEl) {
 		return
@@ -254,16 +313,27 @@ const showMobileTurnMenu = (
 		mobileTurnOptionBButton.textContent = labels[1]
 	}
 	if (mobileTurnOptionCButton) {
-		mobileTurnOptionCButton.textContent = labels[2]
+		if (labels.length === 3) {
+			mobileTurnOptionCButton.textContent = labels[2]
+			mobileTurnOptionCButton.hidden = false
+		} else {
+			mobileTurnOptionCButton.hidden = true
+		}
 	}
 	mobileTurnMenuEl.hidden = false
 }
 
 const showCenterDirectionMenu = (selection: CenterTurnSelection) => {
+	const clockwiseNotation = resolveCenterTurnNotation(selection, true)
+	const counterClockwiseNotation = resolveCenterTurnNotation(selection, false)
+
 	showMobileTurnMenu(
 		{ kind: 'center-direction', selection },
 		formatCenterTarget(selection),
-		['順轉', '逆轉', '取消'],
+		[
+			formatMoveNotationLabel(clockwiseNotation),
+			formatMoveNotationLabel(counterClockwiseNotation),
+		],
 	)
 }
 
@@ -271,7 +341,7 @@ const showEdgeFaceMenu = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption])
 	showMobileTurnMenu(
 		{ kind: 'edge-face', options },
 		formatFaceTarget(options),
-		[options[0].label, options[1].label, '取消'],
+		[options[0].label, options[1].label],
 	)
 }
 
@@ -287,14 +357,17 @@ const showCornerFaceMenu = (
 
 const showFaceDirectionMenu = (
 	face: MobileFaceOption,
-	previousOptions:
-		| [MobileEdgeFaceOption, MobileEdgeFaceOption]
-		| [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
 ) => {
+	const clockwiseNotation = resolveFaceTurnNotation(face.notation, true)
+	const counterClockwiseNotation = resolveFaceTurnNotation(face.notation, false)
+
 	showMobileTurnMenu(
-		{ kind: 'face-direction', face, previousOptions },
+		{ kind: 'face-direction', face },
 		formatFaceDirectionTarget(face),
-		['順轉', '逆轉', '上一步'],
+		[
+			formatMoveNotationLabel(clockwiseNotation),
+			formatMoveNotationLabel(counterClockwiseNotation),
+		],
 	)
 }
 
@@ -548,7 +621,15 @@ moveQueueController = createMoveQueue({
 	onIdle: () => setStatus('待命'),
 })
 
-const enqueueMoveByNotation = (notation: string) => {
+const enqueueMoveByNotation = (
+	notation: string,
+	options: { allowDuringMenu?: boolean } = {},
+) => {
+	if (isInteractionMenuOpen() && !options.allowDuringMenu) {
+		setStatus('請先完成目前互動選單')
+		return
+	}
+
 	const lower = notation.toLowerCase()
 	const config = moveMap[lower]
 	if (!config) {
@@ -644,7 +725,31 @@ moveHistoryController.initialize()
 moveHistoryController.attachClickHandler()
 
 scrambleButton?.addEventListener('click', () => {
+	if (isInteractionMenuOpen()) {
+		setStatus('請先完成目前互動選單')
+		return
+	}
+
 	scrambleController.triggerScramble()
+})
+
+helpToggleButton?.addEventListener('click', () => {
+	if (helpPanelEl?.hidden) {
+		showHelpPanel()
+		return
+	}
+
+	hideHelpPanel()
+})
+
+helpCloseButton?.addEventListener('click', () => {
+	hideHelpPanel()
+})
+
+helpPanelEl?.addEventListener('click', (event) => {
+	if (event.target === helpPanelEl) {
+		hideHelpPanel()
+	}
 })
 
 mobileTurnOptionAButton?.addEventListener('click', () => {
@@ -654,22 +759,26 @@ mobileTurnOptionAButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'center-direction') {
-		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, true))
+		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, true), {
+			allowDuringMenu: true,
+		})
 		hideMobileTurnMenu()
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[0], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[0])
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[0], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[0])
 		return
 	}
 
-	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, true))
+	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, true), {
+		allowDuringMenu: true,
+	})
 	hideMobileTurnMenu()
 })
 
@@ -680,22 +789,26 @@ mobileTurnOptionBButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'center-direction') {
-		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, false))
+		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, false), {
+			allowDuringMenu: true,
+		})
 		hideMobileTurnMenu()
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[1], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[1])
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[1], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[1])
 		return
 	}
 
-	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, false))
+	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, false), {
+		allowDuringMenu: true,
+	})
 	hideMobileTurnMenu()
 })
 
@@ -706,21 +819,11 @@ mobileTurnOptionCButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[2], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[2])
 		return
 	}
 
-	if (pendingMobileTurn.kind !== 'face-direction') {
-		hideMobileTurnMenu()
-		return
-	}
-
-	if (pendingMobileTurn.previousOptions.length === 2) {
-		showEdgeFaceMenu(pendingMobileTurn.previousOptions)
-		return
-	}
-
-	showCornerFaceMenu(pendingMobileTurn.previousOptions)
+	hideMobileTurnMenu()
 })
 
 mobileTurnMenuEl?.addEventListener('click', (event) => {
@@ -730,6 +833,10 @@ mobileTurnMenuEl?.addEventListener('click', (event) => {
 })
 
 renderer.domElement.addEventListener('click', (event) => {
+	if (isInteractionMenuOpen()) {
+		return
+	}
+
 	const rect = renderer.domElement.getBoundingClientRect()
 	pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
 	pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -776,10 +883,55 @@ const animate = () => {
 
 animate()
 
-globalThis.addEventListener('resize', () => {
-	camera.aspect = globalThis.innerWidth / globalThis.innerHeight
+const syncRendererSize = () => {
+	const width = Math.max(cubeStageEl.clientWidth, 1)
+	const height = Math.max(cubeStageEl.clientHeight, 1)
+	camera.aspect = width / height
+
+	const maxNdc = 0.96
+	const getMaxProjectedNdc = (distance: number) => {
+		camera.position.copy(cameraDirection).multiplyScalar(distance)
+		camera.lookAt(0, 0, 0)
+		camera.updateMatrixWorld()
+
+		let maxAbsX = 0
+		let maxAbsY = 0
+		for (const corner of cubeCorners) {
+			const projected = corner.clone().project(camera)
+			maxAbsX = Math.max(maxAbsX, Math.abs(projected.x))
+			maxAbsY = Math.max(maxAbsY, Math.abs(projected.y))
+		}
+
+		return Math.max(maxAbsX, maxAbsY)
+	}
+
+	let low = 2
+	let high = 24
+	for (let i = 0; i < 22; i += 1) {
+		const mid = (low + high) / 2
+		if (getMaxProjectedNdc(mid) > maxNdc) {
+			low = mid
+		} else {
+			high = mid
+		}
+	}
+
+	camera.position.copy(cameraDirection).multiplyScalar(high)
+	camera.lookAt(0, 0, 0)
 	camera.updateProjectionMatrix()
-	renderer.setSize(globalThis.innerWidth, globalThis.innerHeight)
+	renderer.setSize(width, height)
+}
+
+syncRendererSize()
+
+const cubeStageResizeObserver = new ResizeObserver(() => {
+	syncRendererSize()
+})
+
+cubeStageResizeObserver.observe(cubeStageEl)
+
+globalThis.addEventListener('resize', () => {
+	syncRendererSize()
 })
 
 registerRubiksDebug({
