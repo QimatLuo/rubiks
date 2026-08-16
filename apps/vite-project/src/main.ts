@@ -37,6 +37,26 @@ if (!app) {
 	throw new Error('Missing #app container')
 }
 
+const formatLastUpdatedLabel = (isoTimestamp: string | undefined): string => {
+	if (!isoTimestamp) {
+		return '未知'
+	}
+
+	const parsed = new Date(isoTimestamp)
+	if (Number.isNaN(parsed.getTime())) {
+		return isoTimestamp
+	}
+
+	return new Intl.DateTimeFormat('zh-TW', {
+		dateStyle: 'medium',
+		timeStyle: 'medium',
+		hour12: false,
+	}).format(parsed)
+}
+
+const latestCommitTimestamp = import.meta.env.VITE_LAST_COMMIT_TIME
+const latestCommitLabel = formatLastUpdatedLabel(latestCommitTimestamp)
+
 const xyzFeature = createXyzFeature()
 
 app.innerHTML = `
@@ -86,6 +106,7 @@ app.innerHTML = `
 				<p>手機點中心塊、邊塊或角塊可操作轉動</p>
 			</div>
 			${xyzFeature.renderView()}
+			<p class="help-last-updated">最後更新時間：<time id="last-updated-time" datetime="${latestCommitTimestamp ?? ''}">${latestCommitLabel}</time></p>
 		</div>
 	</div>
 `

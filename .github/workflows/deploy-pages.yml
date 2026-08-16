@@ -26,10 +26,15 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Get latest commit time
+        id: last_commit
+        run: echo "timestamp=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+
       - name: Build site
         working-directory: apps/vite-project
         env:
           REPO_NAME: ${{ github.event.repository.name }}
+          VITE_LAST_COMMIT_TIME: ${{ steps.last_commit.outputs.timestamp }}
         run: |
           if [[ "$REPO_NAME" == *.github.io ]]; then
             BASE_PATH="/"
@@ -44,3 +49,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: apps/vite-project/dist
+          full_commit_message: |
+            deploy: publish site
+
+            Last updated: ${{ steps.last_commit.outputs.timestamp }}
