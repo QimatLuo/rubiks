@@ -60,6 +60,7 @@ const {
 	repeatLastButton,
 	historyPrevButton,
 	historyNextButton,
+	statusMessageEl,
 	historyListEl,
 	helpToggleButton,
 	helpCloseButton,
@@ -385,7 +386,15 @@ const moveMap = createBaseMoveMap()
 
 xyzFeature.registerMoveBindings(moveMap)
 
-const setStatus = (_text: string) => {}
+const setStatus = (text: string) => {
+	if (!statusMessageEl) {
+		return
+	}
+
+	statusMessageEl.textContent = text
+}
+
+setStatus('待命')
 
 const formatCenterTarget = (colorLabel: string) => colorLabel
 
@@ -1386,12 +1395,14 @@ mobileTurnOptionDButton?.addEventListener('click', () => {
 
 mobileTurnBackButton?.addEventListener('click', () => {
 	if (!pendingMobileTurn) {
+		setStatus('目前沒有可返回的互動步驟')
 		hideMobileTurnMenu()
 		return
 	}
 
 	const previousState = mobileTurnMenuTrail.pop()
 	if (!previousState) {
+		setStatus('已經是第一步，無法再返回')
 		hideMobileTurnMenu()
 		return
 	}
@@ -1423,6 +1434,11 @@ mobileTurnBackButton?.addEventListener('click', () => {
 })
 
 mobileTurnCancelButton?.addEventListener('click', () => {
+	if (!pendingMobileTurn) {
+		setStatus('目前沒有進行中的互動選單')
+		return
+	}
+
 	hideMobileTurnMenu()
 })
 

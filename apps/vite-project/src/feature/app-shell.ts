@@ -10,6 +10,7 @@ export type AppShellElements = {
 	repeatLastButton: HTMLButtonElement | null
 	historyPrevButton: HTMLButtonElement | null
 	historyNextButton: HTMLButtonElement | null
+	statusMessageEl: HTMLParagraphElement | null
 	historyListEl: HTMLDivElement | null
 	helpToggleButton: HTMLButtonElement | null
 	helpCloseButton: HTMLButtonElement | null
@@ -65,6 +66,7 @@ export const createAppShell = ({
 						說明
 					</button>
 				</div>
+				<p id="status-message" class="status-message" role="status" aria-live="polite">待命</p>
 				<section class="move-history" aria-label="轉動歷史">
 					<div id="move-history-list" class="move-history-list"></div>
 				</section>
@@ -114,6 +116,7 @@ export const createAppShell = ({
 		repeatLastButton: document.querySelector<HTMLButtonElement>('#repeat-last-button'),
 		historyPrevButton: document.querySelector<HTMLButtonElement>('#history-prev-button'),
 		historyNextButton: document.querySelector<HTMLButtonElement>('#history-next-button'),
+		statusMessageEl: document.querySelector<HTMLParagraphElement>('#status-message'),
 		historyListEl: document.querySelector<HTMLDivElement>('#move-history-list'),
 		helpToggleButton: document.querySelector<HTMLButtonElement>('#help-toggle-button'),
 		helpCloseButton: document.querySelector<HTMLButtonElement>('#help-close-button'),

@@ -31,7 +31,17 @@ Deno.test('workspace with restriction only allows unlock move and U/U\'', () => 
 	assert(lowerU.allowed, 'U\' should be allowed while restricted')
 	assert(!denied.allowed, 'non-whitelisted move should be denied while restricted')
 	assert(
-		denied.message === "工作區已移動，僅可做 F 或 U/U'",
+		denied.message === "工作區已移動，僅可做 F' 或 U/U'",
 		'denied restricted move should describe allowed notations',
+	)
+})
+
+Deno.test('workspace restriction message formats lowercase unlock notation without prime', () => {
+	const denied = validateWorkspaceMoveNotation('f', 'r')
+
+	assert(!denied.allowed, 'non-whitelisted move should be denied while restricted')
+	assert(
+		denied.message === "工作區已移動，僅可做 R 或 U/U'",
+		'lowercase unlock notation should be shown as uppercase without prime',
 	)
 })

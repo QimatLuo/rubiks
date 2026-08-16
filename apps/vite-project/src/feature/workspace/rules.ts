@@ -14,6 +14,12 @@ type WorkspaceMoveValidation = {
 	message?: string
 }
 
+const formatMoveNotationLabel = (notation: string) => {
+	const upper = notation.toUpperCase()
+	const isCounterClockwise = notation !== notation.toLowerCase()
+	return isCounterClockwise ? `${upper}'` : upper
+}
+
 export const validateWorkspaceMoveNotation = (
 	notation: string,
 	requiredInverseNotation: string | null,
@@ -28,7 +34,7 @@ export const validateWorkspaceMoveNotation = (
 
 		return {
 			allowed: false,
-			message: `工作區已移動，僅可做 ${requiredInverseNotation} 或 U/U'`,
+			message: `工作區已移動，僅可做 ${formatMoveNotationLabel(requiredInverseNotation)} 或 U/U'`,
 		}
 	}
 
