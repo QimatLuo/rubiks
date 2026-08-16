@@ -278,7 +278,52 @@ const formatCornerTarget = (
 const formatMoveNotationLabel = (notation: string) => {
 	const upper = notation.toUpperCase()
 	const isCounterClockwise = notation !== notation.toLowerCase()
-	return isCounterClockwise ? `${upper}'` : upper
+	const label = isCounterClockwise ? `${upper}'` : upper
+	const horizontalArrow = isCounterClockwise ? '←' : '→'
+	const verticalArrow = isCounterClockwise ? '↑' : '↓'
+	const rotationArrow = isCounterClockwise ? '↺' : '↻'
+
+	if (upper === 'X' || upper === 'Y' || upper === 'Z') {
+		return `${label} ${rotationArrow}`
+	}
+
+	if (upper === 'U') {
+		return `${label} ${isCounterClockwise ? '→' : '←'}`
+	}
+
+	if (upper === 'D') {
+		return `${label} ${isCounterClockwise ? '←' : '→'}`
+	}
+
+	if (upper === 'R') {
+		return `${label} ${isCounterClockwise ? '↓' : '↑'}`
+	}
+
+	if (upper === 'F') {
+		return `${label} ${isCounterClockwise ? '↑' : '↓'}`
+	}
+
+	if (upper === 'L') {
+		return `${label} ${isCounterClockwise ? '↑' : '↓'}`
+	}
+
+	if (upper === 'B') {
+		return `${label} ${isCounterClockwise ? '↓' : '↑'}`
+	}
+
+	if (upper === 'E') {
+		return `${label} ${horizontalArrow}`
+	}
+
+	if (upper === 'S') {
+		return `${label} ${horizontalArrow}`
+	}
+
+	if (upper === 'M') {
+		return `${label} ${verticalArrow}`
+	}
+
+	return label
 }
 
 const formatFaceDirectionTarget = (face: MobileTurnOption) =>
