@@ -350,6 +350,30 @@ canvas {
 	background: rgba(51, 65, 85, 0.92);
 }
 
+.center-turn-nav-actions {
+	margin-top: 0.5rem;
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 0.5rem;
+}
+
+.center-turn-nav-actions button {
+	padding: 0.48rem 0.35rem;
+	border-radius: 0.55rem;
+	border: 1px solid rgba(148, 163, 184, 0.5);
+	background: rgba(30, 41, 59, 0.82);
+	color: #e2e8f0;
+	font-family: inherit;
+	font-size: 0.84rem;
+	cursor: pointer;
+	touch-action: manipulation;
+	transition: background-color 140ms ease, opacity 140ms ease;
+}
+
+.center-turn-nav-actions button:hover {
+	background: rgba(51, 65, 85, 0.92);
+}
+
 @media (max-width: 640px) {
 	.app-shell {
 		padding: 0 0.5rem;
@@ -374,6 +398,10 @@ canvas {
 	}
 
 	.center-turn-actions {
+		grid-template-columns: 1fr;
+	}
+
+	.center-turn-nav-actions {
 		grid-template-columns: 1fr;
 	}
 }

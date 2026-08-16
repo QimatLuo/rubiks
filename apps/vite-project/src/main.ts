@@ -65,6 +65,10 @@ app.innerHTML = `
 						<button id="mobile-turn-option-b" type="button">選項二</button>
 						<button id="mobile-turn-option-c" type="button">選項三</button>
 					</div>
+					<div class="center-turn-nav-actions">
+						<button id="mobile-turn-back-button" type="button">上一步</button>
+						<button id="mobile-turn-cancel-button" type="button">取消</button>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -99,6 +103,8 @@ const mobileTurnTargetEl = document.querySelector<HTMLParagraphElement>('#mobile
 const mobileTurnOptionAButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-a')
 const mobileTurnOptionBButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-b')
 const mobileTurnOptionCButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-c')
+const mobileTurnBackButton = document.querySelector<HTMLButtonElement>('#mobile-turn-back-button')
+const mobileTurnCancelButton = document.querySelector<HTMLButtonElement>('#mobile-turn-cancel-button')
 const cubeStageEl = document.querySelector<HTMLDivElement>('#cube-stage')
 
 if (!cubeStageEl) {
@@ -182,6 +188,33 @@ const colorLabelByHex: Record<string, string> = {
 	[new THREE.Color(facePalette.down).getHexString()]: '白色',
 	[new THREE.Color(facePalette.front).getHexString()]: '綠色',
 	[new THREE.Color(facePalette.back).getHexString()]: '藍色',
+}
+
+const faceColorByNotation: Record<EdgeFaceTarget['notation'], string> = {
+	r: facePalette.right,
+	l: facePalette.left,
+	u: facePalette.up,
+	d: facePalette.down,
+	f: facePalette.front,
+	b: facePalette.back,
+}
+
+const faceColorByLabel: Record<string, string> = {
+	橘色: facePalette.right,
+	紅色: facePalette.left,
+	黃色: facePalette.up,
+	白色: facePalette.down,
+	綠色: facePalette.front,
+	藍色: facePalette.back,
+}
+
+const colorLabelByNotation: Record<EdgeFaceTarget['notation'], string> = {
+	r: '橘色',
+	l: '紅色',
+	u: '黃色',
+	d: '白色',
+	f: '綠色',
+	b: '藍色',
 }
 
 const localFaceDescriptors: Array<{ materialIndex: number; normal: THREE.Vector3 }> = [
@@ -285,8 +318,19 @@ type MobileTurnMenuState =
 	}
 
 let pendingMobileTurn: MobileTurnMenuState | null = null
+const mobileTurnMenuTrail: MobileTurnMenuState[] = []
 
 const isInteractionMenuOpen = () => pendingMobileTurn !== null
+
+const syncMobileTurnNavButtonState = () => {
+	const hasPreviousStep = mobileTurnMenuTrail.length > 0
+	if (mobileTurnBackButton) {
+		mobileTurnBackButton.hidden = !hasPreviousStep
+	}
+	if (mobileTurnCancelButton) {
+		mobileTurnCancelButton.hidden = hasPreviousStep
+	}
+}
 
 const hideMobileTurnMenu = () => {
 	if (!mobileTurnMenuEl) {
@@ -295,6 +339,68 @@ const hideMobileTurnMenu = () => {
 
 	mobileTurnMenuEl.hidden = true
 	pendingMobileTurn = null
+	mobileTurnMenuTrail.length = 0
+	syncMobileTurnNavButtonState()
+}
+
+const getFaceColorByLabelText = (text: string | null | undefined) => {
+	if (!text) {
+		return null
+	}
+
+	for (const [label, color] of Object.entries(faceColorByLabel)) {
+		if (text.includes(label)) {
+			return color
+		}
+	}
+
+	return null
+}
+
+const clearMobileTurnButtonFaceStyle = (button: HTMLButtonElement | null) => {
+	if (!button) {
+		return
+	}
+
+	button.style.removeProperty('background-color')
+	button.style.removeProperty('border-color')
+	button.style.removeProperty('color')
+}
+
+const setMobileTurnButtonFaceStyle = (
+	button: HTMLButtonElement | null,
+	faceColor: string | null,
+) => {
+	if (!button) {
+		return
+	}
+
+	if (!faceColor) {
+		clearMobileTurnButtonFaceStyle(button)
+		return
+	}
+
+	const color = new THREE.Color(faceColor)
+	const luminance = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+	const borderColor = color.clone().multiplyScalar(0.72).getStyle()
+	button.style.backgroundColor = color.getStyle()
+	button.style.borderColor = borderColor
+	button.style.color = luminance > 0.66 ? '#0f172a' : '#f8fafc'
+}
+
+const applyMobileTurnMenuButtonColors = () => {
+	setMobileTurnButtonFaceStyle(
+		mobileTurnOptionAButton,
+		getFaceColorByLabelText(mobileTurnOptionAButton?.textContent),
+	)
+	setMobileTurnButtonFaceStyle(
+		mobileTurnOptionBButton,
+		getFaceColorByLabelText(mobileTurnOptionBButton?.textContent),
+	)
+	setMobileTurnButtonFaceStyle(
+		mobileTurnOptionCButton,
+		getFaceColorByLabelText(mobileTurnOptionCButton?.textContent),
+	)
 }
 
 const setHelpExpandedState = (expanded: boolean) => {
@@ -323,12 +429,22 @@ const showMobileTurnMenu = (
 	state: MobileTurnMenuState,
 	targetText: string,
 	labels: [string, string] | [string, string, string],
+	pushHistory = false,
 ) => {
 	if (!mobileTurnMenuEl) {
 		return
 	}
 
+	if (pushHistory) {
+		if (pendingMobileTurn) {
+			mobileTurnMenuTrail.push(pendingMobileTurn)
+		}
+	} else {
+		mobileTurnMenuTrail.length = 0
+	}
+
 	pendingMobileTurn = state
+	syncMobileTurnNavButtonState()
 	if (mobileTurnTargetEl) {
 		mobileTurnTargetEl.textContent = targetText
 	}
@@ -346,6 +462,7 @@ const showMobileTurnMenu = (
 			mobileTurnOptionCButton.hidden = true
 		}
 	}
+	applyMobileTurnMenuButtonColors()
 	mobileTurnMenuEl.hidden = false
 }
 
@@ -360,6 +477,7 @@ const showCenterDirectionMenu = (selection: CenterTurnSelection, colorLabel: str
 			formatMoveNotationLabel(clockwiseNotation),
 			formatMoveNotationLabel(counterClockwiseNotation),
 		],
+		false,
 	)
 }
 
@@ -370,6 +488,7 @@ const showEdgeFaceMenu = (
 		{ kind: 'edge-face', options },
 		formatEdgeTarget(options),
 		[options[0].label, options[1].label, options[2].label],
+		false,
 	)
 }
 
@@ -380,11 +499,13 @@ const showCornerFaceMenu = (
 		{ kind: 'corner-face', options },
 		formatCornerTarget(options),
 		[options[0].label, options[1].label, options[2].label],
+		false,
 	)
 }
 
 const showFaceDirectionMenu = (
 	face: MobileTurnOption,
+	pushHistory = false,
 ) => {
 	const clockwiseNotation = resolveFaceTurnNotation(face.notation, true)
 	const counterClockwiseNotation = resolveFaceTurnNotation(face.notation, false)
@@ -396,6 +517,7 @@ const showFaceDirectionMenu = (
 			formatMoveNotationLabel(clockwiseNotation),
 			formatMoveNotationLabel(counterClockwiseNotation),
 		],
+		pushHistory,
 	)
 }
 
@@ -869,12 +991,12 @@ mobileTurnOptionAButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[0])
+		showFaceDirectionMenu(pendingMobileTurn.options[0], true)
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[0])
+		showFaceDirectionMenu(pendingMobileTurn.options[0], true)
 		return
 	}
 
@@ -899,12 +1021,12 @@ mobileTurnOptionBButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[1])
+		showFaceDirectionMenu(pendingMobileTurn.options[1], true)
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[1])
+		showFaceDirectionMenu(pendingMobileTurn.options[1], true)
 		return
 	}
 
@@ -921,15 +1043,50 @@ mobileTurnOptionCButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'corner-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[2])
+		showFaceDirectionMenu(pendingMobileTurn.options[2], true)
 		return
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showFaceDirectionMenu(pendingMobileTurn.options[2])
+		showFaceDirectionMenu(pendingMobileTurn.options[2], true)
 		return
 	}
 
+	hideMobileTurnMenu()
+})
+
+mobileTurnBackButton?.addEventListener('click', () => {
+	if (!pendingMobileTurn) {
+		hideMobileTurnMenu()
+		return
+	}
+
+	const previousState = mobileTurnMenuTrail.pop()
+	if (!previousState) {
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (previousState.kind === 'center-direction') {
+		const centerFaceNotation = getFaceNotationFromCenterSelection(previousState.selection)
+		showCenterDirectionMenu(previousState.selection, colorLabelByNotation[centerFaceNotation])
+		return
+	}
+
+	if (previousState.kind === 'edge-face') {
+		showEdgeFaceMenu(previousState.options)
+		return
+	}
+
+	if (previousState.kind === 'corner-face') {
+		showCornerFaceMenu(previousState.options)
+		return
+	}
+
+	showFaceDirectionMenu(previousState.face, false)
+})
+
+mobileTurnCancelButton?.addEventListener('click', () => {
 	hideMobileTurnMenu()
 })
 
