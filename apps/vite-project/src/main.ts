@@ -179,6 +179,18 @@ const gap = 1.05
 
 const workspaceMargin = 0.08
 
+type GridPosition = {
+	x: number
+	y: number
+	z: number
+}
+
+const trackedWorkspaceGridPositions: [GridPosition, GridPosition, GridPosition] = [
+	{ x: 1, y: 1, z: 1 },
+	{ x: 1, y: 0, z: 1 },
+	{ x: 1, y: -1, z: 1 },
+]
+
 const cubeBounds = new THREE.Box3(
 	new THREE.Vector3(-gap - cubeletSize / 2, -gap - cubeletSize / 2, -gap - cubeletSize / 2),
 	new THREE.Vector3(gap + cubeletSize / 2, gap + cubeletSize / 2, gap + cubeletSize / 2),
@@ -254,34 +266,103 @@ const roundedQuarterTurn = (angle: number) => {
 	return Math.round(angle / quarter) * quarter
 }
 
-const createFixedWorkspaceOutline = () => {
-	const minX = gap - cubeletSize / 2 - workspaceMargin
-	const maxX = gap + cubeletSize / 2 + workspaceMargin
-	const minY = -gap - cubeletSize / 2 - workspaceMargin
-	const maxY = gap + cubeletSize / 2 + workspaceMargin
-	const minZ = gap - cubeletSize / 2 - workspaceMargin
-	const maxZ = gap + cubeletSize / 2 + workspaceMargin
+const workspaceOutlineMaterial = new THREE.LineDashedMaterial({
+	color: '#ffffff',
+	dashSize: 0.13,
+	gapSize: 0.08,
+	transparent: true,
+	opacity: 0.95,
+})
 
-	const width = maxX - minX
-	const height = maxY - minY
-	const depth = maxZ - minZ
-
+const createWorkspaceOutlineGeometry = (width: number, height: number, depth: number) => {
 	const box = new THREE.BoxGeometry(width, height, depth)
 	const edges = new THREE.EdgesGeometry(box)
-	const outlineMaterial = new THREE.LineDashedMaterial({
-		color: '#ffffff',
-		dashSize: 0.13,
-		gapSize: 0.08,
-		transparent: true,
-		opacity: 0.95,
-	})
-	const outline = new THREE.LineSegments(edges, outlineMaterial)
-	outline.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
-	outline.computeLineDistances()
-	workspaceGroup.add(outline)
+	box.dispose()
+	return edges
 }
 
-createFixedWorkspaceOutline()
+const workspaceOutline = new THREE.LineSegments(
+	createWorkspaceOutlineGeometry(1, 1, 1),
+	workspaceOutlineMaterial,
+)
+workspaceGroup.add(workspaceOutline)
+
+const getBoundsFromWorkspaceGridPositions = (
+	positions: [GridPosition, GridPosition, GridPosition],
+) => {
+	const min = new THREE.Vector3(Infinity, Infinity, Infinity)
+	const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity)
+
+	for (const position of positions) {
+		const worldX = position.x * gap
+		const worldY = position.y * gap
+		const worldZ = position.z * gap
+		min.x = Math.min(min.x, worldX)
+		min.y = Math.min(min.y, worldY)
+		min.z = Math.min(min.z, worldZ)
+		max.x = Math.max(max.x, worldX)
+		max.y = Math.max(max.y, worldY)
+		max.z = Math.max(max.z, worldZ)
+	}
+
+	const half = cubeletSize / 2 + workspaceMargin
+	min.addScalar(-half)
+	max.addScalar(half)
+
+	return { min, max }
+}
+
+const syncWorkspaceOutline = (positions: [GridPosition, GridPosition, GridPosition]) => {
+	const { min, max } = getBoundsFromWorkspaceGridPositions(positions)
+	const width = max.x - min.x
+	const height = max.y - min.y
+	const depth = max.z - min.z
+
+	const currentGeometry = workspaceOutline.geometry
+	workspaceOutline.geometry = createWorkspaceOutlineGeometry(width, height, depth)
+	currentGeometry.dispose()
+
+	workspaceOutline.position.set(
+		(min.x + max.x) / 2,
+		(min.y + max.y) / 2,
+		(min.z + max.z) / 2,
+	)
+	workspaceOutline.computeLineDistances()
+}
+
+const workspaceGridPositions: [GridPosition, GridPosition, GridPosition] = [
+	{ ...trackedWorkspaceGridPositions[0] },
+	{ ...trackedWorkspaceGridPositions[1] },
+	{ ...trackedWorkspaceGridPositions[2] },
+]
+
+const isWorkspacePositionInMoveLayer = (position: GridPosition, move: Move) => {
+	if (move.layer === 0) {
+		return position[move.axis] === 0
+	}
+
+	return position[move.axis] === move.layer
+}
+
+const rotateWorkspaceGridPosition = (position: GridPosition, move: Move) => {
+	const angle = getMoveAngle(move.notation, move.clockwise)
+	const axisVector =
+		move.axis === 'x'
+			? new THREE.Vector3(1, 0, 0)
+			: move.axis === 'y'
+				? new THREE.Vector3(0, 1, 0)
+				: new THREE.Vector3(0, 0, 1)
+	const rotated = new THREE.Vector3(position.x, position.y, position.z).applyAxisAngle(
+		axisVector,
+		angle,
+	)
+
+	return {
+		x: Math.round(rotated.x),
+		y: Math.round(rotated.y),
+		z: Math.round(rotated.z),
+	}
+}
 
 for (const x of [cubeBounds.min.x, cubeBounds.max.x]) {
 	for (const y of [cubeBounds.min.y, cubeBounds.max.y]) {
@@ -315,6 +396,8 @@ for (let x = -1; x <= 1; x += 1) {
 		}
 	}
 }
+
+syncWorkspaceOutline(workspaceGridPositions)
 
 const setCubeletBrightnessState = (cubelet: THREE.Mesh, brightnessScale: number | null) => {
 	const materials = Array.isArray(cubelet.material) ? cubelet.material : null
@@ -936,6 +1019,11 @@ const rotateLayer = (move: Move, done: () => void) => {
 	const { axis, layer, clockwise, notation } = move
 
 	const targetCubelets = getLayerCubelets(move)
+	const lowerNotation = notation.toLowerCase()
+	const isWorkspaceEligibleMove = lowerNotation === 'r' || lowerNotation === 'f'
+	const shouldMoveWorkspace =
+		isWorkspaceEligibleMove &&
+		workspaceGridPositions.every((position) => isWorkspacePositionInMoveLayer(position, move))
 	if (targetCubelets.length === 0) {
 		done()
 		return
@@ -984,6 +1072,15 @@ const rotateLayer = (move: Move, done: () => void) => {
 		}
 
 		cubeGroup.remove(pivot)
+		if (shouldMoveWorkspace) {
+			for (let index = 0; index < workspaceGridPositions.length; index += 1) {
+				const rotated = rotateWorkspaceGridPosition(workspaceGridPositions[index], move)
+				workspaceGridPositions[index].x = rotated.x
+				workspaceGridPositions[index].y = rotated.y
+				workspaceGridPositions[index].z = rotated.z
+			}
+			syncWorkspaceOutline(workspaceGridPositions)
+		}
 		lastExecutedNotation = move.notation
 
 		const followUpStep = moveHistoryController.onMoveCompleted(move.notation, {
