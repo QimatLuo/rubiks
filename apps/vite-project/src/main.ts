@@ -69,6 +69,7 @@ app.innerHTML = `
 				<button id="repeat-last-button" type="button">再一次</button>
 				<button id="history-prev-button" type="button">上一步</button>
 				<button id="history-next-button" type="button">下一步</button>
+				<button id="workspace-toggle-button" type="button" aria-pressed="false">工作區：關</button>
 				<button id="scramble-button" type="button">打亂</button>
 				<button id="help-toggle-button" class="help-toggle-button" type="button" aria-haspopup="dialog" aria-controls="help-panel" aria-expanded="false">
 					說明
@@ -104,7 +105,7 @@ app.innerHTML = `
 				<h1>Rubik's Cube</h1>
 				<p>按小寫順時針，按大寫逆時針</p>
 				<p>U D L R F B 對應六個面，M E S 對應中間層</p>
-				<p>手機點中心塊、邊塊或角塊可操作轉動</p>
+				<p>按 W 可開關工作區模式</p>
 			</div>
 			${xyzFeature.renderView()}
 			<p class="help-last-updated">最後更新時間：<time id="last-updated-time" datetime="${latestCommitTimestamp ?? ''}">${latestCommitLabel}</time></p>
@@ -113,6 +114,7 @@ app.innerHTML = `
 `
 
 const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
+const workspaceToggleButton = document.querySelector<HTMLButtonElement>('#workspace-toggle-button')
 const repeatLastButton = document.querySelector<HTMLButtonElement>('#repeat-last-button')
 const historyPrevButton = document.querySelector<HTMLButtonElement>('#history-prev-button')
 const historyNextButton = document.querySelector<HTMLButtonElement>('#history-next-button')
@@ -338,6 +340,7 @@ const workspaceGridPositions: [GridPosition, GridPosition, GridPosition] = [
 	{ ...trackedWorkspaceGridPositions[1] },
 	{ ...trackedWorkspaceGridPositions[2] },
 ]
+let workspaceModeEnabled = false
 
 type WorkspaceMoveRestriction = {
 	requiredInverseNotation: string
@@ -427,6 +430,40 @@ for (let x = -1; x <= 1; x += 1) {
 }
 
 syncWorkspaceOutline(workspaceGridPositions)
+workspaceGroup.visible = false
+
+const resetWorkspaceState = () => {
+	const defaults = cloneWorkspacePositions(trackedWorkspaceGridPositions)
+	for (let index = 0; index < workspaceGridPositions.length; index += 1) {
+		workspaceGridPositions[index].x = defaults[index].x
+		workspaceGridPositions[index].y = defaults[index].y
+		workspaceGridPositions[index].z = defaults[index].z
+	}
+	workspaceMoveRestriction = null
+	syncWorkspaceOutline(workspaceGridPositions)
+}
+
+const syncWorkspaceToggleButton = () => {
+	if (!workspaceToggleButton) {
+		return
+	}
+
+	workspaceToggleButton.textContent = workspaceModeEnabled ? '工作區：開' : '工作區：關'
+	workspaceToggleButton.setAttribute('aria-pressed', workspaceModeEnabled ? 'true' : 'false')
+	workspaceToggleButton.classList.toggle('is-active', workspaceModeEnabled)
+}
+
+const setWorkspaceModeEnabled = (enabled: boolean) => {
+	workspaceModeEnabled = enabled
+	if (workspaceModeEnabled) {
+		// 每次啟用都重置，不保留上次工作區進度。
+		resetWorkspaceState()
+	}
+	workspaceGroup.visible = workspaceModeEnabled
+	syncWorkspaceToggleButton()
+}
+
+syncWorkspaceToggleButton()
 
 const setCubeletBrightnessState = (cubelet: THREE.Mesh, brightnessScale: number | null) => {
 	const materials = Array.isArray(cubelet.material) ? cubelet.material : null
@@ -1052,6 +1089,7 @@ const rotateLayer = (move: Move, done: () => void) => {
 	const lowerNotation = notation.toLowerCase()
 	const isWorkspaceEligibleMove = lowerNotation === 'r' || lowerNotation === 'f'
 	const shouldMoveWorkspace =
+		workspaceModeEnabled &&
 		isWorkspaceEligibleMove &&
 		workspaceGridPositions.every((position) => isWorkspacePositionInMoveLayer(position, move))
 	if (targetCubelets.length === 0) {
@@ -1167,14 +1205,28 @@ const enqueueMoveByNotation = (
 		return
 	}
 
-	if (workspaceMoveRestriction) {
-		const isUpperU = notation === 'U'
-		const isLowerU = notation === 'u'
-		const isAllowedUnlockMove = notation === workspaceMoveRestriction.requiredInverseNotation
-		if (!isUpperU && !isLowerU && !isAllowedUnlockMove) {
-			setStatus(
-				`工作區已移動，僅可做 ${workspaceMoveRestriction.requiredInverseNotation} 或 U/U'`,
-			)
+	if (workspaceModeEnabled) {
+		if (workspaceMoveRestriction) {
+			const isUpperU = notation === 'U'
+			const isLowerU = notation === 'u'
+			const isAllowedUnlockMove = notation === workspaceMoveRestriction.requiredInverseNotation
+			if (!isUpperU && !isLowerU && !isAllowedUnlockMove) {
+				setStatus(
+					`工作區已移動，僅可做 ${workspaceMoveRestriction.requiredInverseNotation} 或 U/U'`,
+				)
+				return
+			}
+		} else if (
+			notation !== 'r' &&
+			notation !== 'F' &&
+			notation !== 'u' &&
+			notation !== 'U' &&
+			notation !== 'd' &&
+			notation !== 'D' &&
+			notation !== 'e' &&
+			notation !== 'E'
+		) {
+			setStatus("工作區剛啟用，僅可做 R、F'、U、U'、D、D'、E、E'")
 			return
 		}
 	}
@@ -1287,6 +1339,45 @@ for (const cubelet of cubelets) {
 
 moveHistoryController.initialize()
 moveHistoryController.attachClickHandler()
+
+const toggleWorkspaceMode = () => {
+	if (isInteractionMenuOpen()) {
+		setStatus('請先完成目前互動選單')
+		return false
+	}
+
+	if (moveQueueController.isAnimating() || moveQueueController.getQueueLength() > 0) {
+		setStatus('請等目前動作完成後再切換工作區')
+		return false
+	}
+
+	setWorkspaceModeEnabled(!workspaceModeEnabled)
+	return true
+}
+
+workspaceToggleButton?.addEventListener('click', () => {
+	toggleWorkspaceMode()
+})
+
+globalThis.addEventListener('keydown', (event) => {
+	if (event.key !== 'w' && event.key !== 'W') {
+		return
+	}
+
+	const target = event.target
+	if (
+		target instanceof HTMLInputElement ||
+		target instanceof HTMLTextAreaElement ||
+		(target instanceof HTMLElement && target.isContentEditable)
+	) {
+		return
+	}
+
+	const didToggle = toggleWorkspaceMode()
+	if (didToggle) {
+		event.preventDefault()
+	}
+})
 
 scrambleButton?.addEventListener('click', () => {
 	if (isInteractionMenuOpen()) {

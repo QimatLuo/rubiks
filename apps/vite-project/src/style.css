@@ -77,6 +77,7 @@ canvas {
 
 
 .help-toggle-button,
+#workspace-toggle-button,
 #scramble-button,
 #repeat-last-button,
 #history-prev-button,
@@ -96,6 +97,7 @@ canvas {
 }
 
 .help-toggle-button:hover,
+#workspace-toggle-button:hover,
 #scramble-button:hover,
 #repeat-last-button:hover,
 #history-prev-button:hover,
@@ -104,11 +106,17 @@ canvas {
 }
 
 .help-toggle-button:active,
+#workspace-toggle-button:active,
 #scramble-button:active,
 #repeat-last-button:active,
 #history-prev-button:active,
 #history-next-button:active {
 	background: rgba(71, 85, 105, 0.95);
+}
+
+#workspace-toggle-button.is-active {
+	background: rgba(2, 132, 199, 0.4);
+	border-color: rgba(125, 211, 252, 0.95);
 }
 
 .help-panel {
