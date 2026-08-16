@@ -2,12 +2,25 @@
 import './style.css'
 // @ts-ignore Dependency is resolved from deno.json imports.
 import * as THREE from 'three'
+import {
+	createBaseMoveMap,
+	getMoveAngle,
+	registerMoveKeyboard,
+	type Axis,
+	type Move,
+	type MoveConfig,
+} from './feature/moves'
+import { createScrambleController } from './feature/scramble'
+import { registerRubiksDebug } from './feature/debug'
+import { createXyzFeature } from './feature/xyz'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
 if (!app) {
 	throw new Error('Missing #app container')
 }
+
+const xyzFeature = createXyzFeature()
 
 app.innerHTML = `
 	<div class="hud-stack">
@@ -18,18 +31,7 @@ app.innerHTML = `
 			<button id="scramble-button" type="button">打亂</button>
 			<p id="move-status">狀態：待命</p>
 		</div>
-		<div class="axis-view" aria-label="XYZ 軸視圖">
-			<h2>按 X Y Z 可翻轉整顆方塊</h2>
-			<svg viewBox="0 0 140 120" role="img" aria-label="XYZ 軸方向圖">
-				<circle cx="70" cy="62" r="4" fill="#cbd5e1" />
-				<line x1="70" y1="62" x2="114" y2="88" class="axis-line axis-x" />
-				<line x1="70" y1="62" x2="70" y2="14" class="axis-line axis-y" />
-				<line x1="70" y1="62" x2="28" y2="88" class="axis-line axis-z" />
-				<text x="116" y="93" class="axis-label axis-x">+X</text>
-				<text x="58" y="12" class="axis-label axis-y">+Y</text>
-				<text x="8" y="93" class="axis-label axis-z">+Z</text>
-			</svg>
-		</div>
+		${xyzFeature.renderView()}
 	</div>
 `
 
@@ -107,47 +109,12 @@ for (let x = -1; x <= 1; x += 1) {
 	}
 }
 
-type Axis = 'x' | 'y' | 'z'
+const moveMap = createBaseMoveMap()
 
-type MoveConfig = {
-	axis: Axis
-	layer: -1 | 0 | 1
-}
-
-const moveMap: Record<string, MoveConfig> = {
-	u: { axis: 'y', layer: 1 },
-	d: { axis: 'y', layer: -1 },
-	r: { axis: 'x', layer: 1 },
-	l: { axis: 'x', layer: -1 },
-	f: { axis: 'z', layer: 1 },
-	b: { axis: 'z', layer: -1 },
-	x: { axis: 'x', layer: 0 },
-	y: { axis: 'y', layer: 0 },
-	z: { axis: 'z', layer: 0 },
-}
-
-type Move = {
-	axis: Axis
-	layer: -1 | 0 | 1
-	clockwise: boolean
-	notation: string
-}
+xyzFeature.registerMoveBindings(moveMap)
 
 const moveQueue: Move[] = []
 let isAnimating = false
-let lastScramble = ''
-
-const quarterTurnByFace: Record<string, number> = {
-	u: -Math.PI / 2,
-	d: Math.PI / 2,
-	r: -Math.PI / 2,
-	l: Math.PI / 2,
-	f: -Math.PI / 2,
-	b: Math.PI / 2,
-	x: -Math.PI / 2,
-	y: -Math.PI / 2,
-	z: -Math.PI / 2,
-}
 
 const setStatus = (text: string) => {
 	if (!statusEl) {
@@ -158,7 +125,7 @@ const setStatus = (text: string) => {
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-const getLayerCubelets = (axis: Axis, layer: -1 | 0 | 1) => {
+const getLayerCubelets = (axis: Axis, layer: MoveConfig['layer']) => {
 	if (layer === 0) {
 		return cubelets
 	}
@@ -166,13 +133,6 @@ const getLayerCubelets = (axis: Axis, layer: -1 | 0 | 1) => {
 	const target = layer * gap
 	return cubelets.filter((cubelet) => Math.abs(cubelet.position[axis] - target) < 0.001)
 }
-
-const getMoveAngle = (notation: string, clockwise: boolean) => {
-	const lower = notation.toLowerCase()
-	const clockwiseAngle = quarterTurnByFace[lower]
-	return clockwise ? clockwiseAngle : -clockwiseAngle
-}
-
 const rotateLayer = (move: Move) => {
 	const { axis, layer, clockwise, notation } = move
 
@@ -279,22 +239,6 @@ const invertAlgorithm = (algorithm: string) =>
 		.map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()))
 		.join('')
 
-const randomScramble = (count: number) => {
-	const faces = ['u', 'd', 'l', 'r', 'f', 'b']
-	const result: string[] = []
-
-	while (result.length < count) {
-		const candidate = faces[Math.floor(Math.random() * faces.length)]
-		const prev = result[result.length - 1]
-		if (candidate === prev) {
-			continue
-		}
-		result.push(candidate)
-	}
-
-	return result.join('')
-}
-
 const isSolved = () => {
 	for (const cubelet of cubelets) {
 		const px = Math.round(cubelet.position.x / gap) * gap
@@ -343,6 +287,11 @@ const waitForIdle = async () => {
 	}
 }
 
+const scrambleController = createScrambleController({
+	setStatus,
+	enqueueAlgorithm,
+})
+
 for (const cubelet of cubelets) {
 	cubelet.userData.home = {
 		x: cubelet.position.x,
@@ -351,26 +300,11 @@ for (const cubelet of cubelets) {
 	}
 }
 
-const triggerScramble = () => {
-	lastScramble = randomScramble(24)
-	setStatus(`打亂 ${lastScramble}`)
-	enqueueAlgorithm(lastScramble)
-}
-
 scrambleButton?.addEventListener('click', () => {
-	triggerScramble()
+	scrambleController.triggerScramble()
 })
 
-globalThis.addEventListener('keydown', (event) => {
-	const key = event.key
-
-	const lower = key.toLowerCase()
-	if (!moveMap[lower]) {
-		return
-	}
-
-	enqueueMoveByNotation(key)
-})
+registerMoveKeyboard({ moveMap, enqueueMoveByNotation })
 
 const animate = () => {
 	renderer.render(scene, camera)
@@ -385,15 +319,13 @@ globalThis.addEventListener('resize', () => {
 	renderer.setSize(globalThis.innerWidth, globalThis.innerHeight)
 })
 
-Object.assign(globalThis, {
-	__rubiksDebug: {
-		enqueueMoveByNotation,
-		enqueueAlgorithm,
-		invertAlgorithm,
-		isSolved,
-		waitForIdle,
-		getLastScramble: () => lastScramble,
-		getQueueLength: () => moveQueue.length,
-		isAnimating: () => isAnimating,
-	},
+registerRubiksDebug({
+	enqueueMoveByNotation,
+	enqueueAlgorithm,
+	invertAlgorithm,
+	isSolved,
+	waitForIdle,
+	getLastScramble: scrambleController.getLastScramble,
+	getQueueLength: () => moveQueue.length,
+	isAnimating: () => isAnimating,
 })
