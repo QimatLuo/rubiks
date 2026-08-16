@@ -25,16 +25,25 @@ canvas {
 }
 
 .hud {
-	position: fixed;
+	position: relative;
 	z-index: 2;
-	top: 1rem;
-	left: 1rem;
 	padding: 0.8rem 1rem;
 	border: 1px solid rgba(148, 163, 184, 0.45);
 	border-radius: 0.75rem;
 	background: rgba(2, 6, 23, 0.75);
 	backdrop-filter: blur(8px);
 	max-width: min(90vw, 21rem);
+}
+
+.hud-stack {
+	position: fixed;
+	z-index: 2;
+	top: 1rem;
+	left: 1rem;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.5rem;
 }
 
 .hud h1 {
@@ -47,6 +56,60 @@ canvas {
 	margin: 0.25rem 0;
 	font-size: 0.9rem;
 	color: #cbd5e1;
+}
+
+.axis-view {
+	margin-top: 0.5rem;
+	padding: 0.5rem 0.6rem;
+	border: 1px solid rgba(125, 211, 252, 0.35);
+	border-radius: 0.6rem;
+	background: rgba(15, 23, 42, 0.6);
+	width: fit-content;
+}
+
+.axis-view h2 {
+	margin: 0;
+	font-size: 0.78rem;
+	letter-spacing: 0.04em;
+	color: #bae6fd;
+}
+
+.axis-view svg {
+	display: block;
+	width: 100%;
+	max-width: 9rem;
+	height: auto;
+	margin-top: 0.35rem;
+}
+
+.axis-line {
+	stroke-width: 2.4;
+	fill: none;
+	stroke-linecap: round;
+}
+
+.axis-label {
+	font-size: 10px;
+	font-weight: 700;
+	font-family: 'Noto Sans TC', 'Segoe UI', sans-serif;
+}
+
+.axis-x {
+	stroke: #fb7185;
+	color: #fb7185;
+	fill: #fb7185;
+}
+
+.axis-y {
+	stroke: #4ade80;
+	color: #4ade80;
+	fill: #4ade80;
+}
+
+.axis-z {
+	stroke: #60a5fa;
+	color: #60a5fa;
+	fill: #60a5fa;
 }
 
 #scramble-button {
@@ -69,4 +132,19 @@ canvas {
 
 #scramble-button:active {
 	background: rgba(71, 85, 105, 0.95);
+}
+
+@media (max-width: 640px) {
+	.hud-stack {
+		top: 0.6rem;
+		left: 0.6rem;
+	}
+
+	.hud {
+		padding: 0.7rem 0.8rem;
+	}
+
+	.axis-view svg {
+		max-width: 7.5rem;
+	}
 }

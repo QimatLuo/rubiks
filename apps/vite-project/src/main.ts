@@ -10,12 +10,26 @@ if (!app) {
 }
 
 app.innerHTML = `
-	<div class="hud">
-		<h1>Rubik's Cube</h1>
-		<p>按小寫順時針，按大寫逆時針</p>
-		<p>U D L R F B 對應六個面</p>
-		<button id="scramble-button" type="button">打亂</button>
-		<p id="move-status">狀態：待命</p>
+	<div class="hud-stack">
+		<div class="hud">
+			<h1>Rubik's Cube</h1>
+			<p>按小寫順時針，按大寫逆時針</p>
+			<p>U D L R F B 對應六個面</p>
+			<button id="scramble-button" type="button">打亂</button>
+			<p id="move-status">狀態：待命</p>
+		</div>
+		<div class="axis-view" aria-label="XYZ 軸視圖">
+			<h2>按 X Y Z 可翻轉整顆方塊</h2>
+			<svg viewBox="0 0 140 120" role="img" aria-label="XYZ 軸方向圖">
+				<circle cx="70" cy="62" r="4" fill="#cbd5e1" />
+				<line x1="70" y1="62" x2="114" y2="88" class="axis-line axis-x" />
+				<line x1="70" y1="62" x2="70" y2="14" class="axis-line axis-y" />
+				<line x1="70" y1="62" x2="28" y2="88" class="axis-line axis-z" />
+				<text x="116" y="93" class="axis-label axis-x">+X</text>
+				<text x="58" y="12" class="axis-label axis-y">+Y</text>
+				<text x="8" y="93" class="axis-label axis-z">+Z</text>
+			</svg>
+		</div>
 	</div>
 `
 
@@ -97,7 +111,7 @@ type Axis = 'x' | 'y' | 'z'
 
 type MoveConfig = {
 	axis: Axis
-	layer: -1 | 1
+	layer: -1 | 0 | 1
 }
 
 const moveMap: Record<string, MoveConfig> = {
@@ -107,11 +121,14 @@ const moveMap: Record<string, MoveConfig> = {
 	l: { axis: 'x', layer: -1 },
 	f: { axis: 'z', layer: 1 },
 	b: { axis: 'z', layer: -1 },
+	x: { axis: 'x', layer: 0 },
+	y: { axis: 'y', layer: 0 },
+	z: { axis: 'z', layer: 0 },
 }
 
 type Move = {
 	axis: Axis
-	layer: -1 | 1
+	layer: -1 | 0 | 1
 	clockwise: boolean
 	notation: string
 }
@@ -127,6 +144,9 @@ const quarterTurnByFace: Record<string, number> = {
 	l: Math.PI / 2,
 	f: -Math.PI / 2,
 	b: Math.PI / 2,
+	x: -Math.PI / 2,
+	y: -Math.PI / 2,
+	z: -Math.PI / 2,
 }
 
 const setStatus = (text: string) => {
@@ -138,7 +158,11 @@ const setStatus = (text: string) => {
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-const getLayerCubelets = (axis: Axis, layer: -1 | 1) => {
+const getLayerCubelets = (axis: Axis, layer: -1 | 0 | 1) => {
+	if (layer === 0) {
+		return cubelets
+	}
+
 	const target = layer * gap
 	return cubelets.filter((cubelet) => Math.abs(cubelet.position[axis] - target) < 0.001)
 }
