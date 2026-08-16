@@ -12,6 +12,7 @@ type CreateMoveHistoryControllerOptions<State> = {
 	clearPendingMoves: () => void
 	setStatus: (text: string) => void
 	isAnimating: () => boolean
+	onHistoryItemSelect?: (selection: { index: number; notation: string | null }) => void
 }
 
 type MoveCompleteOptions = {
@@ -31,6 +32,7 @@ export const createMoveHistoryController = <State>({
 	clearPendingMoves,
 	setStatus,
 	isAnimating,
+	onHistoryItemSelect,
 }: CreateMoveHistoryControllerOptions<State>) => {
 	const core = createMoveHistoryCore<State>()
 
@@ -107,6 +109,12 @@ export const createMoveHistoryController = <State>({
 
 			const index = Number.parseInt(indexValue, 10)
 			if (!Number.isFinite(index)) {
+				return
+			}
+
+			const notation = core.getNotationAtIndex(index)
+			if (onHistoryItemSelect) {
+				onHistoryItemSelect({ index, notation })
 				return
 			}
 

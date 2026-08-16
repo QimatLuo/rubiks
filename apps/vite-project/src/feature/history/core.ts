@@ -130,6 +130,14 @@ export const createMoveHistoryCore = <State>() => {
 		return items
 	}
 
+	const getNotationAtIndex = (index: number) => {
+		if (index <= 0 || index > moveHistory.length) {
+			return null
+		}
+
+		return moveHistory[index - 1] ?? null
+	}
+
 	return {
 		initialize,
 		trimFutureHistory,
@@ -142,6 +150,7 @@ export const createMoveHistoryCore = <State>() => {
 		getStepInstruction,
 		setCurrentIndex,
 		getViewItems,
+		getNotationAtIndex,
 		getDebugState: () => ({
 			moveHistory: [...moveHistory],
 			currentHistoryIndex,

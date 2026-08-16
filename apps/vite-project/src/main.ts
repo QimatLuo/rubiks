@@ -316,6 +316,11 @@ type MobileTurnMenuState =
 		kind: 'face-direction'
 		face: MobileTurnOption
 	}
+	| {
+		kind: 'history-action'
+		index: number
+		notation: string | null
+	}
 
 let pendingMobileTurn: MobileTurnMenuState | null = null
 const mobileTurnMenuTrail: MobileTurnMenuState[] = []
@@ -521,6 +526,19 @@ const showFaceDirectionMenu = (
 	)
 }
 
+const showHistoryActionMenu = (selection: { index: number; notation: string | null }) => {
+	const targetText = selection.notation
+		? `已選動作：${formatMoveNotationLabel(selection.notation)}`
+		: '已選起始狀態'
+
+	showMobileTurnMenu(
+		{ kind: 'history-action', index: selection.index, notation: selection.notation },
+		targetText,
+		['再一次', '恢復狀態', '逆做'],
+		false,
+	)
+}
+
 const getRoundedGridCoord = (value: number) => {
 	const normalized = Math.round(value / gap)
 	return Math.abs(value - normalized * gap) < 0.001 ? normalized : null
@@ -704,6 +722,14 @@ const moveHistoryController = createMoveHistoryController<CubeletSnapshot[]>({
 	},
 	setStatus,
 	isAnimating: () => moveQueueController.isAnimating(),
+	onHistoryItemSelect: (selection) => {
+		if (isInteractionMenuOpen()) {
+			setStatus('請先完成目前互動選單')
+			return
+		}
+
+		showHistoryActionMenu(selection)
+	},
 })
 
 const getLayerCubelets = (move: Move) => {
@@ -1000,6 +1026,20 @@ mobileTurnOptionAButton?.addEventListener('click', () => {
 		return
 	}
 
+	if (pendingMobileTurn.kind === 'history-action') {
+		if (!pendingMobileTurn.notation) {
+			setStatus('起始狀態沒有可再做的動作')
+			hideMobileTurnMenu()
+			return
+		}
+
+		enqueueMoveByNotation(pendingMobileTurn.notation, {
+			allowDuringMenu: true,
+		})
+		hideMobileTurnMenu()
+		return
+	}
+
 	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, true), {
 		allowDuringMenu: true,
 	})
@@ -1030,6 +1070,12 @@ mobileTurnOptionBButton?.addEventListener('click', () => {
 		return
 	}
 
+	if (pendingMobileTurn.kind === 'history-action') {
+		moveHistoryController.requestJump(pendingMobileTurn.index)
+		hideMobileTurnMenu()
+		return
+	}
+
 	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, false), {
 		allowDuringMenu: true,
 	})
@@ -1049,6 +1095,20 @@ mobileTurnOptionCButton?.addEventListener('click', () => {
 
 	if (pendingMobileTurn.kind === 'edge-face') {
 		showFaceDirectionMenu(pendingMobileTurn.options[2], true)
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'history-action') {
+		if (!pendingMobileTurn.notation) {
+			setStatus('起始狀態沒有可逆做的動作')
+			hideMobileTurnMenu()
+			return
+		}
+
+		enqueueMoveByNotation(invertAlgorithm(pendingMobileTurn.notation), {
+			allowDuringMenu: true,
+		})
+		hideMobileTurnMenu()
 		return
 	}
 
@@ -1080,6 +1140,14 @@ mobileTurnBackButton?.addEventListener('click', () => {
 
 	if (previousState.kind === 'corner-face') {
 		showCornerFaceMenu(previousState.options)
+		return
+	}
+
+	if (previousState.kind === 'history-action') {
+		showHistoryActionMenu({
+			index: previousState.index,
+			notation: previousState.notation,
+		})
 		return
 	}
 
