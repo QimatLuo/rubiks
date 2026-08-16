@@ -35,11 +35,19 @@ canvas {
 	max-width: min(90vw, 21rem);
 }
 
+.hud-layout {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.55rem;
+	width: 100%;
+}
+
 .hud-stack {
 	position: fixed;
 	z-index: 2;
 	top: 1rem;
 	left: 1rem;
+	right: 1rem;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
@@ -126,6 +134,55 @@ canvas {
 	transition: background-color 140ms ease;
 }
 
+.move-history {
+	flex: 1;
+	min-width: 0;
+	padding: 0.7rem;
+	border: 1px solid rgba(148, 163, 184, 0.45);
+	border-radius: 0.75rem;
+	background: rgba(2, 6, 23, 0.7);
+	backdrop-filter: blur(8px);
+	max-height: min(52vh, 12rem);
+	overflow: hidden;
+}
+
+.move-history-list {
+	margin-top: 0;
+	display: flex;
+	flex-direction: row;
+	gap: 0.35rem;
+	max-width: 100%;
+	overflow-x: auto;
+	overflow-y: hidden;
+	padding-right: 0.1rem;
+}
+
+.history-item {
+	flex: 0 0 auto;
+	text-align: left;
+	padding: 0.35rem 0.48rem;
+	border: 1px solid rgba(148, 163, 184, 0.35);
+	border-radius: 0.45rem;
+	background: rgba(30, 41, 59, 0.55);
+	color: #e2e8f0;
+	font-family: inherit;
+	font-size: 0.82rem;
+	line-height: 1.15;
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.history-item:hover {
+	background: rgba(51, 65, 85, 0.7);
+	border-color: rgba(191, 219, 254, 0.65);
+}
+
+.history-item.is-current {
+	background: rgba(30, 64, 175, 0.45);
+	border-color: rgba(147, 197, 253, 0.85);
+	color: #dbeafe;
+}
+
 #scramble-button:hover {
 	background: rgba(51, 65, 85, 0.9);
 }
@@ -138,10 +195,25 @@ canvas {
 	.hud-stack {
 		top: 0.6rem;
 		left: 0.6rem;
+		right: 0.6rem;
+	}
+
+	.hud-layout {
+		flex-direction: column;
 	}
 
 	.hud {
 		padding: 0.7rem 0.8rem;
+	}
+
+	.move-history {
+		min-width: 0;
+		width: 100%;
+		max-height: 30vh;
+	}
+
+	.move-history-list {
+		max-width: 100%;
 	}
 
 	.axis-view svg {

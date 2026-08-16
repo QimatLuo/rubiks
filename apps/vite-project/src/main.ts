@@ -4,6 +4,7 @@ import './style.css'
 import * as THREE from 'three'
 import {
 	createBaseMoveMap,
+	createMoveQueue,
 	getMoveAngle,
 	registerMoveKeyboard,
 	type Axis,
@@ -13,6 +14,11 @@ import {
 import { createScrambleController } from './feature/scramble'
 import { registerRubiksDebug } from './feature/debug'
 import { createXyzFeature } from './feature/xyz'
+import {
+	createCubeStateAdapter,
+	createMoveHistoryController,
+	type CubeletSnapshot,
+} from './feature/history'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
@@ -24,12 +30,17 @@ const xyzFeature = createXyzFeature()
 
 app.innerHTML = `
 	<div class="hud-stack">
-		<div class="hud">
-			<h1>Rubik's Cube</h1>
-			<p>按小寫順時針，按大寫逆時針</p>
-			<p>U D L R F B 對應六個面</p>
-			<button id="scramble-button" type="button">打亂</button>
-			<p id="move-status">狀態：待命</p>
+		<div class="hud-layout">
+			<div class="hud">
+				<h1>Rubik's Cube</h1>
+				<p>按小寫順時針，按大寫逆時針</p>
+				<p>U D L R F B 對應六個面</p>
+				<button id="scramble-button" type="button">打亂</button>
+				<p id="move-status">狀態：待命</p>
+			</div>
+			<section class="move-history" aria-label="轉動歷史">
+				<div id="move-history-list" class="move-history-list"></div>
+			</section>
 		</div>
 		${xyzFeature.renderView()}
 	</div>
@@ -37,6 +48,7 @@ app.innerHTML = `
 
 const statusEl = document.querySelector<HTMLParagraphElement>('#move-status')
 const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
+const historyListEl = document.querySelector<HTMLDivElement>('#move-history-list')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio, 2))
@@ -113,9 +125,6 @@ const moveMap = createBaseMoveMap()
 
 xyzFeature.registerMoveBindings(moveMap)
 
-const moveQueue: Move[] = []
-let isAnimating = false
-
 const setStatus = (text: string) => {
 	if (!statusEl) {
 		return
@@ -125,6 +134,21 @@ const setStatus = (text: string) => {
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+const cubeStateAdapter = createCubeStateAdapter(cubelets)
+
+let moveQueueController!: ReturnType<typeof createMoveQueue>
+
+const moveHistoryController = createMoveHistoryController<CubeletSnapshot[]>({
+	historyListEl,
+	captureState: cubeStateAdapter.captureState,
+	restoreState: cubeStateAdapter.restoreState,
+	clearPendingMoves: () => {
+		moveQueueController.clearPending()
+	},
+	setStatus,
+	isAnimating: () => moveQueueController.isAnimating(),
+})
+
 const getLayerCubelets = (axis: Axis, layer: MoveConfig['layer']) => {
 	if (layer === 0) {
 		return cubelets
@@ -133,13 +157,12 @@ const getLayerCubelets = (axis: Axis, layer: MoveConfig['layer']) => {
 	const target = layer * gap
 	return cubelets.filter((cubelet) => Math.abs(cubelet.position[axis] - target) < 0.001)
 }
-const rotateLayer = (move: Move) => {
+const rotateLayer = (move: Move, done: () => void) => {
 	const { axis, layer, clockwise, notation } = move
 
 	const targetCubelets = getLayerCubelets(axis, layer)
 	if (targetCubelets.length === 0) {
-		isAnimating = false
-		processQueue()
+		done()
 		return
 	}
 
@@ -186,28 +209,23 @@ const rotateLayer = (move: Move) => {
 		}
 
 		cubeGroup.remove(pivot)
-		isAnimating = false
+
+		if (moveHistoryController.onMoveCompleted(move.notation)) {
+			done()
+			return
+		}
+
 		setStatus('待命')
-		processQueue()
+		done()
 	}
 
 	requestAnimationFrame(animateRotation)
 }
 
-const processQueue = () => {
-	if (isAnimating) {
-		return
-	}
-
-	const next = moveQueue.shift()
-	if (!next) {
-		setStatus('待命')
-		return
-	}
-
-	isAnimating = true
-	rotateLayer(next)
-}
+moveQueueController = createMoveQueue({
+	runMove: rotateLayer,
+	onIdle: () => setStatus('待命'),
+})
 
 const enqueueMoveByNotation = (notation: string) => {
 	const lower = notation.toLowerCase()
@@ -216,14 +234,15 @@ const enqueueMoveByNotation = (notation: string) => {
 		return
 	}
 
+	moveHistoryController.onBeforeEnqueueMove()
+
 	const clockwise = notation === lower
-	moveQueue.push({
+	moveQueueController.enqueue({
 		axis: config.axis,
 		layer: config.layer,
 		clockwise,
 		notation,
 	})
-	processQueue()
 }
 
 const enqueueAlgorithm = (algorithm: string) => {
@@ -282,7 +301,7 @@ const isSolved = () => {
 }
 
 const waitForIdle = async () => {
-	while (isAnimating || moveQueue.length > 0) {
+	while (moveQueueController.isAnimating() || moveQueueController.getQueueLength() > 0) {
 		await wait(20)
 	}
 }
@@ -299,6 +318,9 @@ for (const cubelet of cubelets) {
 		z: cubelet.position.z,
 	}
 }
+
+moveHistoryController.initialize()
+moveHistoryController.attachClickHandler()
 
 scrambleButton?.addEventListener('click', () => {
 	scrambleController.triggerScramble()
@@ -326,6 +348,6 @@ registerRubiksDebug({
 	isSolved,
 	waitForIdle,
 	getLastScramble: scrambleController.getLastScramble,
-	getQueueLength: () => moveQueue.length,
-	isAnimating: () => isAnimating,
+	getQueueLength: () => moveQueueController.getQueueLength(),
+	isAnimating: () => moveQueueController.isAnimating(),
 })
