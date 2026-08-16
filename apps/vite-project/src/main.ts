@@ -266,6 +266,9 @@ const roundedQuarterTurn = (angle: number) => {
 	return Math.round(angle / quarter) * quarter
 }
 
+const invertMoveNotation = (notation: string) =>
+	notation === notation.toLowerCase() ? notation.toUpperCase() : notation.toLowerCase()
+
 const workspaceOutlineMaterial = new THREE.LineDashedMaterial({
 	color: '#ffffff',
 	dashSize: 0.13,
@@ -335,6 +338,32 @@ const workspaceGridPositions: [GridPosition, GridPosition, GridPosition] = [
 	{ ...trackedWorkspaceGridPositions[1] },
 	{ ...trackedWorkspaceGridPositions[2] },
 ]
+
+type WorkspaceMoveRestriction = {
+	requiredInverseNotation: string
+	restorePositions: [GridPosition, GridPosition, GridPosition]
+}
+
+let workspaceMoveRestriction: WorkspaceMoveRestriction | null = null
+
+const cloneWorkspacePositions = (
+	positions: [GridPosition, GridPosition, GridPosition],
+): [GridPosition, GridPosition, GridPosition] => [
+	{ ...positions[0] },
+	{ ...positions[1] },
+	{ ...positions[2] },
+]
+
+const sortWorkspacePositions = (positions: [GridPosition, GridPosition, GridPosition]) =>
+	positions
+		.map((position) => `${position.x},${position.y},${position.z}`)
+		.sort()
+		.join('|')
+
+const isSameWorkspacePositions = (
+	a: [GridPosition, GridPosition, GridPosition],
+	b: [GridPosition, GridPosition, GridPosition],
+) => sortWorkspacePositions(a) === sortWorkspacePositions(b)
 
 const isWorkspacePositionInMoveLayer = (position: GridPosition, move: Move) => {
 	if (move.layer === 0) {
@@ -1017,6 +1046,7 @@ const getLayerCubelets = (move: Move) => {
 }
 const rotateLayer = (move: Move, done: () => void) => {
 	const { axis, layer, clockwise, notation } = move
+	const workspacePositionsBeforeMove = cloneWorkspacePositions(workspaceGridPositions)
 
 	const targetCubelets = getLayerCubelets(move)
 	const lowerNotation = notation.toLowerCase()
@@ -1080,6 +1110,19 @@ const rotateLayer = (move: Move, done: () => void) => {
 				workspaceGridPositions[index].z = rotated.z
 			}
 			syncWorkspaceOutline(workspaceGridPositions)
+
+			if (
+				workspaceMoveRestriction &&
+				notation === workspaceMoveRestriction.requiredInverseNotation &&
+				isSameWorkspacePositions(workspaceGridPositions, workspaceMoveRestriction.restorePositions)
+			) {
+				workspaceMoveRestriction = null
+			} else {
+				workspaceMoveRestriction = {
+					requiredInverseNotation: invertMoveNotation(notation),
+					restorePositions: workspacePositionsBeforeMove,
+				}
+			}
 		}
 		lastExecutedNotation = move.notation
 
@@ -1124,6 +1167,18 @@ const enqueueMoveByNotation = (
 		return
 	}
 
+	if (workspaceMoveRestriction) {
+		const isUpperU = notation === 'U'
+		const isLowerU = notation === 'u'
+		const isAllowedUnlockMove = notation === workspaceMoveRestriction.requiredInverseNotation
+		if (!isUpperU && !isLowerU && !isAllowedUnlockMove) {
+			setStatus(
+				`工作區已移動，僅可做 ${workspaceMoveRestriction.requiredInverseNotation} 或 U/U'`,
+			)
+			return
+		}
+	}
+
 	if (!options.skipHistoryTrim) {
 		moveHistoryController.onBeforeEnqueueMove()
 	}
@@ -1166,7 +1221,7 @@ const invertAlgorithm = (algorithm: string) =>
 	algorithm
 		.split('')
 		.reverse()
-		.map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()))
+		.map((ch) => invertMoveNotation(ch))
 		.join('')
 
 const isSolved = () => {
