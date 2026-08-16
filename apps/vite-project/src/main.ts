@@ -332,17 +332,34 @@ const syncWorkspaceToggleButton = () => {
 	workspaceToggleButton.classList.toggle('is-active', workspaceModeEnabled)
 }
 
+const syncScrambleButtonState = () => {
+	if (!scrambleButton) {
+		return
+	}
+
+	scrambleButton.disabled = false
+	scrambleButton.setAttribute('aria-disabled', workspaceModeEnabled ? 'true' : 'false')
+	scrambleButton.classList.toggle('is-disabled', workspaceModeEnabled)
+	scrambleButton.setAttribute(
+		'title',
+		workspaceModeEnabled ? '工作區模式開啟時不可打亂' : '打亂魔術方塊',
+	)
+}
+
 const setWorkspaceModeEnabled = (enabled: boolean) => {
 	workspaceModeEnabled = enabled
 	if (workspaceModeEnabled) {
 		// 每次啟用都重置，不保留上次工作區進度。
 		resetWorkspaceState()
+		setStatus('工作區模式開啟，打亂已停用')
 	}
 	workspaceGroup.visible = workspaceModeEnabled
 	syncWorkspaceToggleButton()
+	syncScrambleButtonState()
 }
 
 syncWorkspaceToggleButton()
+syncScrambleButtonState()
 
 const setCubeletBrightnessState = (cubelet: THREE.Mesh, brightnessScale: number | null) => {
 	const materials = Array.isArray(cubelet.material) ? cubelet.material : null
@@ -1325,6 +1342,11 @@ globalThis.addEventListener('keydown', (event) => {
 scrambleButton?.addEventListener('click', () => {
 	if (isInteractionMenuOpen()) {
 		setStatus('請先完成目前互動選單')
+		return
+	}
+
+	if (workspaceModeEnabled) {
+		setStatus('工作區模式開啟時不可打亂')
 		return
 	}
 

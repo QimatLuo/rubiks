@@ -133,6 +133,11 @@ canvas {
 	border-color: rgba(125, 211, 252, 0.95);
 }
 
+#scramble-button.is-disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
 .help-panel {
 	position: fixed;
 	inset: 0;
