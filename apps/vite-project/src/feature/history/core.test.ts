@@ -49,3 +49,20 @@ Deno.test('move history core trims future branch and can jump/queue', () => {
 	debug = core.getDebugState()
 	assert(debug.currentHistoryIndex === 0, 'current index should be updated by jump')
 })
+
+Deno.test('move history core produces one-step instructions', () => {
+	const core = createMoveHistoryCore<string>()
+
+	core.initialize('S0')
+	core.appendMove('u', 'S1')
+	core.appendMove('r', 'S2')
+
+	let step = core.getStepInstruction(-1)
+	assert(step?.notation === 'R', 'previous should invert last move notation')
+	assert(step?.targetIndex === 1, 'previous should target index - 1')
+
+	core.setCurrentIndex(1)
+	step = core.getStepInstruction(1)
+	assert(step?.notation === 'r', 'next should replay stored move notation')
+	assert(step?.targetIndex === 2, 'next should target index + 1')
+})

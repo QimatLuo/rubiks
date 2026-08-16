@@ -48,6 +48,9 @@ app.innerHTML = `
 					說明
 				</button>
 				<button id="scramble-button" type="button">打亂</button>
+				<button id="repeat-last-button" type="button">再一次</button>
+				<button id="history-prev-button" type="button">上一步</button>
+				<button id="history-next-button" type="button">下一步</button>
 			</div>
 			<section class="move-history" aria-label="轉動歷史">
 				<div id="move-history-list" class="move-history-list"></div>
@@ -83,6 +86,9 @@ app.innerHTML = `
 `
 
 const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
+const repeatLastButton = document.querySelector<HTMLButtonElement>('#repeat-last-button')
+const historyPrevButton = document.querySelector<HTMLButtonElement>('#history-prev-button')
+const historyNextButton = document.querySelector<HTMLButtonElement>('#history-next-button')
 const historyListEl = document.querySelector<HTMLDivElement>('#move-history-list')
 const helpToggleButton = document.querySelector<HTMLButtonElement>('#help-toggle-button')
 const helpCloseButton = document.querySelector<HTMLButtonElement>('#help-close-button')
@@ -531,6 +537,7 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 const cubeStateAdapter = createCubeStateAdapter(cubelets)
 
 let moveQueueController!: ReturnType<typeof createMoveQueue>
+let lastExecutedNotation: string | null = null
 
 const moveHistoryController = createMoveHistoryController<CubeletSnapshot[]>({
 	historyListEl,
@@ -603,10 +610,16 @@ const rotateLayer = (move: Move, done: () => void) => {
 		}
 
 		cubeGroup.remove(pivot)
+		lastExecutedNotation = move.notation
 
-		if (moveHistoryController.onMoveCompleted(move.notation)) {
-			done()
-			return
+		const followUpStep = moveHistoryController.onMoveCompleted(move.notation, {
+			historyTargetIndex: move.historyTargetIndex,
+		})
+		if (followUpStep) {
+			enqueueMoveByNotation(followUpStep.notation, {
+				skipHistoryTrim: true,
+				historyTargetIndex: followUpStep.targetIndex,
+			})
 		}
 
 		setStatus('待命')
@@ -623,7 +636,11 @@ moveQueueController = createMoveQueue({
 
 const enqueueMoveByNotation = (
 	notation: string,
-	options: { allowDuringMenu?: boolean } = {},
+	options: {
+		allowDuringMenu?: boolean
+		skipHistoryTrim?: boolean
+		historyTargetIndex?: number
+	} = {},
 ) => {
 	if (isInteractionMenuOpen() && !options.allowDuringMenu) {
 		setStatus('請先完成目前互動選單')
@@ -636,7 +653,9 @@ const enqueueMoveByNotation = (
 		return
 	}
 
-	moveHistoryController.onBeforeEnqueueMove()
+	if (!options.skipHistoryTrim) {
+		moveHistoryController.onBeforeEnqueueMove()
+	}
 
 	const clockwise = notation === lower
 	moveQueueController.enqueue({
@@ -644,6 +663,25 @@ const enqueueMoveByNotation = (
 		layer: config.layer,
 		clockwise,
 		notation,
+		historyTargetIndex: options.historyTargetIndex,
+	})
+}
+
+const enqueueHistoryStep = (direction: 1 | -1) => {
+	if (isInteractionMenuOpen()) {
+		setStatus('請先完成目前互動選單')
+		return
+	}
+
+	const step = moveHistoryController.requestStep(direction)
+	if (!step) {
+		setStatus(direction === -1 ? '已經是最前一步' : '已經是最新一步')
+		return
+	}
+
+	enqueueMoveByNotation(step.notation, {
+		skipHistoryTrim: true,
+		historyTargetIndex: step.targetIndex,
 	})
 }
 
@@ -731,6 +769,28 @@ scrambleButton?.addEventListener('click', () => {
 	}
 
 	scrambleController.triggerScramble()
+})
+
+repeatLastButton?.addEventListener('click', () => {
+	if (isInteractionMenuOpen()) {
+		setStatus('請先完成目前互動選單')
+		return
+	}
+
+	if (!lastExecutedNotation) {
+		setStatus('目前沒有可再執行的最後動作')
+		return
+	}
+
+	enqueueMoveByNotation(lastExecutedNotation)
+})
+
+historyPrevButton?.addEventListener('click', () => {
+	enqueueHistoryStep(-1)
+})
+
+historyNextButton?.addEventListener('click', () => {
+	enqueueHistoryStep(1)
 })
 
 helpToggleButton?.addEventListener('click', () => {

@@ -12,4 +12,5 @@ export type Move = {
 	layer: -1 | 0 | 1
 	clockwise: boolean
 	notation: string
+	historyTargetIndex?: number
 }

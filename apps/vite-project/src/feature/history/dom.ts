@@ -14,6 +14,10 @@ type CreateMoveHistoryControllerOptions<State> = {
 	isAnimating: () => boolean
 }
 
+type MoveCompleteOptions = {
+	historyTargetIndex?: number
+}
+
 export const formatHistoryNotation = (notation: string) => {
 	const upper = notation.toUpperCase()
 	const isCounterClockwise = notation !== notation.toLowerCase()
@@ -73,6 +77,17 @@ export const createMoveHistoryController = <State>({
 		}
 	}
 
+	const requestStep = (direction: 1 | -1) => {
+		if (isAnimating()) {
+			core.queueStep(direction)
+			clearPendingMoves()
+			setStatus('正在等待目前轉動完成，之後切換歷史步驟')
+			return null
+		}
+
+		return core.getStepInstruction(direction)
+	}
+
 	const attachClickHandler = () => {
 		historyListEl?.addEventListener('click', (event) => {
 			const target = event.target as HTMLElement | null
@@ -108,21 +123,48 @@ export const createMoveHistoryController = <State>({
 			core.trimFutureHistory()
 			renderMoveHistory()
 		},
-		onMoveCompleted: (notation: string) => {
+		onMoveCompleted: (notation: string, options: MoveCompleteOptions = {}) => {
+			if (typeof options.historyTargetIndex === 'number') {
+				core.setCurrentIndex(options.historyTargetIndex)
+				renderMoveHistory()
+
+				const queuedDirection = core.consumeQueuedStep()
+				if (queuedDirection !== null) {
+					const queuedStep = core.getStepInstruction(queuedDirection)
+					if (queuedStep) {
+						setStatus('待命')
+						return queuedStep
+					}
+				}
+
+				setStatus('待命')
+				return null
+			}
+
 			core.appendMove(notation, captureState())
 			renderMoveHistory()
 
+			const queuedDirection = core.consumeQueuedStep()
+			if (queuedDirection !== null) {
+				const queuedStep = core.getStepInstruction(queuedDirection)
+				if (queuedStep) {
+					setStatus('待命')
+					return queuedStep
+				}
+			}
+
 			const queuedIndex = core.consumeQueuedJump()
 			if (queuedIndex === null) {
-				return false
+				return null
 			}
 
 			jumpToHistory(queuedIndex)
 			setStatus('待命')
-			return true
+			return null
 		},
 		attachClickHandler,
 		requestJump,
+		requestStep,
 		getDebugState: core.getDebugState,
 	}
 }

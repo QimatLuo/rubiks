@@ -4,11 +4,20 @@ export type MoveHistoryViewItem = {
 	isCurrent: boolean
 }
 
+export type MoveHistoryStepInstruction = {
+	notation: string
+	targetIndex: number
+}
+
 export const createMoveHistoryCore = <State>() => {
 	const stateHistory: State[] = []
 	const moveHistory: string[] = []
 	let currentHistoryIndex = 0
 	let queuedHistoryRestoreIndex: number | null = null
+	let queuedStepDirection: 1 | -1 | null = null
+
+	const invertNotation = (notation: string) =>
+		notation === notation.toLowerCase() ? notation.toUpperCase() : notation.toLowerCase()
 
 	const initialize = (initialState: State) => {
 		stateHistory.push(initialState)
@@ -33,6 +42,10 @@ export const createMoveHistoryCore = <State>() => {
 		queuedHistoryRestoreIndex = index
 	}
 
+	const queueStep = (direction: 1 | -1) => {
+		queuedStepDirection = direction
+	}
+
 	const consumeQueuedJump = () => {
 		if (queuedHistoryRestoreIndex === null) {
 			return null
@@ -40,6 +53,16 @@ export const createMoveHistoryCore = <State>() => {
 
 		const target = queuedHistoryRestoreIndex
 		queuedHistoryRestoreIndex = null
+		return target
+	}
+
+	const consumeQueuedStep = () => {
+		if (queuedStepDirection === null) {
+			return null
+		}
+
+		const target = queuedStepDirection
+		queuedStepDirection = null
 		return target
 	}
 
@@ -51,6 +74,42 @@ export const createMoveHistoryCore = <State>() => {
 
 		currentHistoryIndex = index
 		return target
+	}
+
+	const getStepInstruction = (direction: 1 | -1): MoveHistoryStepInstruction | null => {
+		if (direction === 1) {
+			if (currentHistoryIndex >= moveHistory.length) {
+				return null
+			}
+
+			return {
+				notation: moveHistory[currentHistoryIndex],
+				targetIndex: currentHistoryIndex + 1,
+			}
+		}
+
+		if (currentHistoryIndex <= 0) {
+			return null
+		}
+
+		const notation = moveHistory[currentHistoryIndex - 1]
+		if (!notation) {
+			return null
+		}
+
+		return {
+			notation: invertNotation(notation),
+			targetIndex: currentHistoryIndex - 1,
+		}
+	}
+
+	const setCurrentIndex = (index: number) => {
+		if (index < 0 || index > moveHistory.length) {
+			return false
+		}
+
+		currentHistoryIndex = index
+		return true
 	}
 
 	const getViewItems = (): MoveHistoryViewItem[] => {
@@ -76,13 +135,18 @@ export const createMoveHistoryCore = <State>() => {
 		trimFutureHistory,
 		appendMove,
 		queueJump,
+		queueStep,
 		consumeQueuedJump,
+		consumeQueuedStep,
 		jumpTo,
+		getStepInstruction,
+		setCurrentIndex,
 		getViewItems,
 		getDebugState: () => ({
 			moveHistory: [...moveHistory],
 			currentHistoryIndex,
 			queuedHistoryRestoreIndex,
+			queuedStepDirection,
 			stateCount: stateHistory.length,
 		}),
 	}

@@ -120,7 +120,42 @@ Deno.test('move history queues restore while animation is active', () => {
 
 	animating = false
 	stateIndex = 2
-	const handledQueuedRestore = controller.onMoveCompleted('r')
-	assert(handledQueuedRestore, 'completed move should consume queued restore')
+	controller.onMoveCompleted('r')
 	assert(restored[restored.length - 1] === 'S0', 'queued restore should jump to requested index')
+})
+
+Deno.test('move history controller provides animated previous and next steps', () => {
+	const historyListEl = createMockListElement()
+	const states: string[] = ['S0', 'S1', 'S2']
+	let stateIndex = 0
+
+	const controller = createMoveHistoryController<string>({
+		historyListEl,
+		captureState: () => states[stateIndex],
+		restoreState: () => {},
+		clearPendingMoves: () => {},
+		setStatus: () => {},
+		isAnimating: () => false,
+	})
+
+	controller.initialize()
+
+	stateIndex = 1
+	controller.onBeforeEnqueueMove()
+	controller.onMoveCompleted('u')
+
+	stateIndex = 2
+	controller.onBeforeEnqueueMove()
+	controller.onMoveCompleted('r')
+
+	const prevStep = controller.requestStep(-1)
+	assert(prevStep?.notation === 'R', 'previous step should use inverse notation')
+	assert(prevStep?.targetIndex === 1, 'previous step should target prior index')
+
+	controller.onMoveCompleted('R', {
+		historyTargetIndex: prevStep?.targetIndex,
+	})
+	const nextStep = controller.requestStep(1)
+	assert(nextStep?.notation === 'r', 'next step should use stored forward notation')
+	assert(nextStep?.targetIndex === 2, 'next step should target later index')
 })
