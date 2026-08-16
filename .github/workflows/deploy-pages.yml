@@ -37,7 +37,7 @@ jobs:
             BASE_PATH="/$REPO_NAME/"
           fi
 
-          deno task build -- --base "$BASE_PATH"
+          deno task build --base "$BASE_PATH"
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
