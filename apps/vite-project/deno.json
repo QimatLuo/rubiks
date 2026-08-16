@@ -6,10 +6,12 @@
     "serve": "deno run --allow-net --allow-read jsr:@std/http@1/file-server dist/"
   },
   "compilerOptions": {
-    "lib": ["ES2023", "DOM"]
+    "lib": ["ES2023", "DOM"],
+    "types": ["vite/client"]
   },
   "imports": {
     "@deno/vite-plugin": "npm:@deno/vite-plugin@^2.0.2",
+    "three": "npm:three@^0.179.1",
     "vite": "npm:vite@^8.0.3"
   }
 }
