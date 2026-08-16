@@ -48,3 +48,25 @@ canvas {
 	font-size: 0.9rem;
 	color: #cbd5e1;
 }
+
+#scramble-button {
+	margin-top: 0.45rem;
+	padding: 0.45rem 0.8rem;
+	border: 1px solid rgba(148, 163, 184, 0.5);
+	border-radius: 0.55rem;
+	background: rgba(30, 41, 59, 0.8);
+	color: #e2e8f0;
+	font-size: 0.9rem;
+	font-family: inherit;
+	cursor: pointer;
+	touch-action: manipulation;
+	transition: background-color 140ms ease;
+}
+
+#scramble-button:hover {
+	background: rgba(51, 65, 85, 0.9);
+}
+
+#scramble-button:active {
+	background: rgba(71, 85, 105, 0.95);
+}

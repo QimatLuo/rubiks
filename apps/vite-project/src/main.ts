@@ -14,12 +14,13 @@ app.innerHTML = `
 		<h1>Rubik's Cube</h1>
 		<p>按小寫順時針，按大寫逆時針</p>
 		<p>U D L R F B 對應六個面</p>
-		<p>S 自動打亂，Shift+S 自動復原</p>
+		<button id="scramble-button" type="button">打亂</button>
 		<p id="move-status">狀態：待命</p>
 	</div>
 `
 
 const statusEl = document.querySelector<HTMLParagraphElement>('#move-status')
+const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio, 2))
@@ -326,27 +327,18 @@ for (const cubelet of cubelets) {
 	}
 }
 
+const triggerScramble = () => {
+	lastScramble = randomScramble(24)
+	setStatus(`打亂 ${lastScramble}`)
+	enqueueAlgorithm(lastScramble)
+}
+
+scrambleButton?.addEventListener('click', () => {
+	triggerScramble()
+})
+
 globalThis.addEventListener('keydown', (event) => {
 	const key = event.key
-
-	if (key === 's') {
-		lastScramble = randomScramble(24)
-		setStatus(`打亂 ${lastScramble}`)
-		enqueueAlgorithm(lastScramble)
-		return
-	}
-
-	if (key === 'S') {
-		if (!lastScramble) {
-			setStatus('尚未打亂')
-			return
-		}
-
-		const inverse = invertAlgorithm(lastScramble)
-		setStatus(`復原 ${inverse}`)
-		enqueueAlgorithm(inverse)
-		return
-	}
 
 	const lower = key.toLowerCase()
 	if (!moveMap[lower]) {
