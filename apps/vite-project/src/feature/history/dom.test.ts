@@ -12,6 +12,12 @@ type MockHistoryListElement = {
 	innerHTML: string
 	scrollLeft: number
 	scrollWidth: number
+	scrollTop: number
+	scrollHeight: number
+	parentElement: {
+		scrollTop: number
+		scrollHeight: number
+	} | null
 	addEventListener: (
 		type: string,
 		handler: (event: { target: unknown }) => void,
@@ -23,6 +29,12 @@ const createMockListElement = (): MockHistoryListElement => ({
 	innerHTML: '',
 	scrollLeft: 0,
 	scrollWidth: 100,
+	scrollTop: 0,
+	scrollHeight: 100,
+	parentElement: {
+		scrollTop: 0,
+		scrollHeight: 200,
+	},
 	addEventListener(type, handler) {
 		if (type === 'click') {
 			this.clickHandler = handler

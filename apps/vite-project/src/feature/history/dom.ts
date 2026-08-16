@@ -1,9 +1,19 @@
 import { createMoveHistoryCore } from './core.ts'
 
-type HistoryListElement = Pick<
-	HTMLDivElement,
-	'innerHTML' | 'scrollLeft' | 'scrollWidth' | 'addEventListener'
->
+type ScrollContainerElement = Pick<HTMLDivElement, 'scrollTop' | 'scrollHeight'>
+
+type HistoryListElement = {
+	innerHTML: string
+	scrollLeft: number
+	scrollWidth: number
+	scrollTop: number
+	scrollHeight: number
+	parentElement: ScrollContainerElement | null
+	addEventListener: (
+		type: string,
+		handler: (event: { target: unknown }) => void,
+	) => void
+}
 
 type CreateMoveHistoryControllerOptions<State> = {
 	historyListEl: HistoryListElement | null
@@ -36,6 +46,19 @@ export const createMoveHistoryController = <State>({
 }: CreateMoveHistoryControllerOptions<State>) => {
 	const core = createMoveHistoryCore<State>()
 
+	const scrollHistoryToLatest = () => {
+		if (!historyListEl) {
+			return
+		}
+
+		const parent = historyListEl.parentElement as ScrollContainerElement | null
+		if (parent) {
+			parent.scrollTop = parent.scrollHeight
+		}
+
+		historyListEl.scrollLeft = historyListEl.scrollWidth
+	}
+
 	const renderMoveHistory = () => {
 		if (!historyListEl) {
 			return
@@ -50,7 +73,7 @@ export const createMoveHistoryController = <State>({
 			})
 			.join('')
 
-		historyListEl.scrollLeft = historyListEl.scrollWidth
+		scrollHistoryToLatest()
 	}
 
 	const jumpToHistory = (index: number) => {

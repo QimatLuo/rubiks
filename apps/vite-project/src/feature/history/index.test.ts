@@ -15,6 +15,12 @@ type MockHistoryListElement = {
 	innerHTML: string
 	scrollLeft: number
 	scrollWidth: number
+	scrollTop: number
+	scrollHeight: number
+	parentElement: {
+		scrollTop: number
+		scrollHeight: number
+	} | null
 	addEventListener: (
 		type: string,
 		handler: (event: { target: unknown }) => void,
@@ -26,6 +32,12 @@ const createMockListElement = (): MockHistoryListElement => ({
 	innerHTML: '',
 	scrollLeft: 0,
 	scrollWidth: 100,
+	scrollTop: 0,
+	scrollHeight: 100,
+	parentElement: {
+		scrollTop: 0,
+		scrollHeight: 200,
+	},
 	addEventListener(type, handler) {
 		if (type === 'click') {
 			this.clickHandler = handler
@@ -60,12 +72,20 @@ Deno.test('move history controller tracks steps, trims future, and restores stat
 
 	controller.initialize()
 	assert(historyListEl.innerHTML.includes('起始'), 'initial history item should render')
+	assert(
+		historyListEl.parentElement?.scrollTop === historyListEl.parentElement?.scrollHeight,
+		'history should scroll to latest on initialize',
+	)
 
 	states.push('S1')
 	stateIndex = 1
 	controller.onBeforeEnqueueMove()
 	controller.onMoveCompleted('u')
 	assert(historyListEl.innerHTML.includes('>U<'), 'history should render formatted notation')
+	assert(
+		historyListEl.parentElement?.scrollTop === historyListEl.parentElement?.scrollHeight,
+		'history should scroll to latest when a new move is added',
+	)
 
 	states.push('S2')
 	stateIndex = 2
