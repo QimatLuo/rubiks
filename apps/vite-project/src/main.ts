@@ -58,8 +58,7 @@ app.innerHTML = `
 				<div id="move-history-list" class="move-history-list"></div>
 			</section>
 			<div id="mobile-turn-menu" class="center-turn-menu" hidden>
-				<div class="center-turn-card" role="dialog" aria-modal="true" aria-labelledby="mobile-turn-title">
-					<h2 id="mobile-turn-title">手機轉動</h2>
+				<div class="center-turn-card" aria-label="手機轉動選單">
 					<p id="mobile-turn-target" class="center-turn-target">請選擇操作</p>
 					<div class="center-turn-actions">
 						<button id="mobile-turn-option-a" type="button">選項一</button>
@@ -234,17 +233,14 @@ xyzFeature.registerMoveBindings(moveMap)
 
 const setStatus = (_text: string) => {}
 
-const formatCenterTarget = (selection: CenterTurnSelection) => {
-	const label = `${selection.sign === 1 ? '+' : '-'}${selection.axis.toUpperCase()}`
-	return `已選中心塊：${label}`
-}
+const formatCenterTarget = (colorLabel: string) => colorLabel
 
 const formatEdgeTarget = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption, MobileMiddleLayerOption]) =>
-	`已選邊塊：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
+	`${options[0].label.replace(/面$/, '')}/${options[1].label.replace(/面$/, '')}`
 
 const formatCornerTarget = (
 	options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
-) => `已選角塊：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
+) => options.map((option) => option.label.replace(/面$/, '')).join('/')
 
 const formatMoveNotationLabel = (notation: string) => {
 	const upper = notation.toUpperCase()
@@ -254,6 +250,18 @@ const formatMoveNotationLabel = (notation: string) => {
 
 const formatFaceDirectionTarget = (face: MobileTurnOption) =>
 	`已選面：${face.label}（再選轉動方向）`
+
+const getFaceNotationFromCenterSelection = (
+	selection: CenterTurnSelection,
+): EdgeFaceTarget['notation'] => {
+	if (selection.axis === 'x') {
+		return selection.sign === 1 ? 'r' : 'l'
+	}
+	if (selection.axis === 'y') {
+		return selection.sign === 1 ? 'u' : 'd'
+	}
+	return selection.sign === 1 ? 'f' : 'b'
+}
 
 const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
@@ -341,13 +349,13 @@ const showMobileTurnMenu = (
 	mobileTurnMenuEl.hidden = false
 }
 
-const showCenterDirectionMenu = (selection: CenterTurnSelection) => {
+const showCenterDirectionMenu = (selection: CenterTurnSelection, colorLabel: string) => {
 	const clockwiseNotation = resolveCenterTurnNotation(selection, true)
 	const counterClockwiseNotation = resolveCenterTurnNotation(selection, false)
 
 	showMobileTurnMenu(
 		{ kind: 'center-direction', selection },
-		formatCenterTarget(selection),
+		formatCenterTarget(colorLabel),
 		[
 			formatMoveNotationLabel(clockwiseNotation),
 			formatMoveNotationLabel(counterClockwiseNotation),
@@ -506,7 +514,7 @@ const getEdgeFaceOptionsFromMesh = (
 		}
 
 		return {
-			label,
+			label: `${label}面`,
 			notation: target.notation,
 		}
 	})
@@ -546,7 +554,7 @@ const getCornerFaceOptionsFromMesh = (
 		}
 
 		return {
-			label,
+			label: `${label}面`,
 			notation: target.notation,
 		}
 	})
@@ -955,7 +963,13 @@ renderer.domElement.addEventListener('click', (event) => {
 
 	const selection = getCenterTurnSelectionFromMesh(hitMesh)
 	if (selection) {
-		showCenterDirectionMenu(selection)
+		const centerFaceNotation = getFaceNotationFromCenterSelection(selection)
+		const colorLabel = getStickerLabelByNotation(hitMesh)[centerFaceNotation]
+		if (!colorLabel) {
+			return
+		}
+
+		showCenterDirectionMenu(selection, colorLabel)
 		return
 	}
 
