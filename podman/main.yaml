@@ -1,0 +1,51 @@
+x-volumes: &volumes
+  - name: deno_dir
+    hostPath:
+      path: /tmp
+  - name: host
+    persistentVolumeClaim:
+      claimName: host
+  - name: w
+    hostPath:
+      path: .
+
+x-volumeMounts: &volumeMounts
+  - name: deno_dir
+    mountPath: /tmp
+  - name: host
+    mountPath: /host
+  - name: w
+    mountPath: /w
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rubiks-ui
+spec:
+  volumes: *volumes
+  containers:
+    - name: server
+      image: docker.io/denoland/deno
+      command:
+        - deno
+        - task
+        - dev
+        - --host
+      workingDir: /w/apps/vite-project
+      envFrom:
+        - configMapRef:
+            name: env
+      ports:
+        - hostPort: 5173
+          containerPort: 5173
+      volumeMounts: *volumeMounts
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env
+data:
+  DENO_CERT: "/host/West-CA1.crt"
+  DENO_DIR: "/tmp"
