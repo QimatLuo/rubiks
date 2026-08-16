@@ -11,6 +11,8 @@ export type EdgeFaceTarget = {
 	notation: 'u' | 'd' | 'l' | 'r' | 'f' | 'b'
 }
 
+export type CornerFaceTarget = EdgeFaceTarget
+
 const faceByAxisSign: Record<Axis, Record<-1 | 1, EdgeFaceTarget>> = {
 	x: {
 		[-1]: { axis: 'x', sign: -1, notation: 'l' },
@@ -53,6 +55,28 @@ export const getEdgeFaceTargetsFromGridPosition = (position: {
 	return [
 		faceByAxisSign[axisA][signA as -1 | 1],
 		faceByAxisSign[axisB][signB as -1 | 1],
+	]
+}
+
+export const getCornerFaceTargetsFromGridPosition = (position: {
+	x: number
+	y: number
+	z: number
+}): [CornerFaceTarget, CornerFaceTarget, CornerFaceTarget] | null => {
+	const entries = [
+		['x', position.x],
+		['y', position.y],
+		['z', position.z],
+	] as const
+
+	if (entries.some(([, value]) => Math.abs(value) !== 1)) {
+		return null
+	}
+
+	return entries.map(([axis, sign]) => faceByAxisSign[axis][sign as -1 | 1]) as [
+		CornerFaceTarget,
+		CornerFaceTarget,
+		CornerFaceTarget,
 	]
 }
 

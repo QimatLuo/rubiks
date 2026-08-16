@@ -3,6 +3,7 @@
 import { createBaseMoveMap } from '../moves/index.ts'
 import { createXyzFeature } from './index.ts'
 import {
+	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
 	resolveCenterTurnNotation,
 	resolveFaceTurnNotation,
@@ -68,6 +69,26 @@ Deno.test('getEdgeFaceTargetsFromGridPosition returns null for non-edge cubelets
 
 	assert(center === null, 'center cubelet should not produce edge options')
 	assert(corner === null, 'corner cubelet should not produce edge options')
+})
+
+Deno.test('getCornerFaceTargetsFromGridPosition returns three face targets for corner cubelet', () => {
+	const targets = getCornerFaceTargetsFromGridPosition({ x: 1, y: 1, z: -1 })
+	assert(targets !== null, 'corner selection should not be null')
+	if (!targets) {
+		throw new Error('corner selection should not be null')
+	}
+
+	assert(targets[0].notation === 'r', 'first target notation should be r')
+	assert(targets[1].notation === 'u', 'second target notation should be u')
+	assert(targets[2].notation === 'b', 'third target notation should be b')
+})
+
+Deno.test('getCornerFaceTargetsFromGridPosition returns null for non-corner cubelets', () => {
+	const center = getCornerFaceTargetsFromGridPosition({ x: 0, y: 0, z: 1 })
+	const edge = getCornerFaceTargetsFromGridPosition({ x: 0, y: 1, z: 1 })
+
+	assert(center === null, 'center cubelet should not produce corner options')
+	assert(edge === null, 'edge cubelet should not produce corner options')
 })
 
 Deno.test('resolveFaceTurnNotation maps direction to lowercase/uppercase face move', () => {

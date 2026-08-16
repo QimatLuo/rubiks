@@ -15,10 +15,12 @@ import { createScrambleController } from './feature/scramble'
 import { registerRubiksDebug } from './feature/debug'
 import {
 	createXyzFeature,
+	getCornerFaceTargetsFromGridPosition,
 	getEdgeFaceTargetsFromGridPosition,
 	resolveCenterTurnNotation,
 	resolveFaceTurnNotation,
 	type CenterTurnSelection,
+	type CornerFaceTarget,
 	type EdgeFaceTarget,
 } from './feature/xyz'
 import {
@@ -42,7 +44,7 @@ app.innerHTML = `
 				<h1>Rubik's Cube</h1>
 				<p>按小寫順時針，按大寫逆時針</p>
 				<p>U D L R F B 對應六個面</p>
-				<p>手機點中心塊或邊塊可操作轉動</p>
+				<p>手機點中心塊、邊塊或角塊可操作轉動</p>
 				<button id="scramble-button" type="button">打亂</button>
 				<p id="move-status">狀態：待命</p>
 			</div>
@@ -124,6 +126,13 @@ type MobileEdgeFaceOption = {
 	notation: EdgeFaceTarget['notation']
 }
 
+type MobileCornerFaceOption = {
+	label: string
+	notation: CornerFaceTarget['notation']
+}
+
+type MobileFaceOption = MobileEdgeFaceOption | MobileCornerFaceOption
+
 const colorLabelByHex: Record<string, string> = {
 	[new THREE.Color(facePalette.right).getHexString()]: '橘色',
 	[new THREE.Color(facePalette.left).getHexString()]: '紅色',
@@ -184,10 +193,10 @@ const formatCenterTarget = (selection: CenterTurnSelection) => {
 	return `已選中心塊：${label}`
 }
 
-const formatEdgeFaceTarget = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption]) =>
-	`已選邊塊：${options[0].label} / ${options[1].label}（先選轉動面）`
+const formatFaceTarget = (options: MobileFaceOption[]) =>
+	`已選${options.length === 2 ? '邊塊' : '角塊'}：${options.map((option) => option.label).join(' / ')}（先選轉動面）`
 
-const formatEdgeDirectionTarget = (face: MobileEdgeFaceOption) =>
+const formatFaceDirectionTarget = (face: MobileFaceOption) =>
 	`已選面：${face.label}（再選順轉或逆轉）`
 
 const raycaster = new THREE.Raycaster()
@@ -203,9 +212,15 @@ type MobileTurnMenuState =
 		options: [MobileEdgeFaceOption, MobileEdgeFaceOption]
 	}
 	| {
-		kind: 'edge-direction'
-		face: MobileEdgeFaceOption
-		previousOptions: [MobileEdgeFaceOption, MobileEdgeFaceOption]
+		kind: 'corner-face'
+		options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption]
+	}
+	| {
+		kind: 'face-direction'
+		face: MobileFaceOption
+		previousOptions:
+			| [MobileEdgeFaceOption, MobileEdgeFaceOption]
+			| [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption]
 	}
 
 let pendingMobileTurn: MobileTurnMenuState | null = null
@@ -255,18 +270,30 @@ const showCenterDirectionMenu = (selection: CenterTurnSelection) => {
 const showEdgeFaceMenu = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption]) => {
 	showMobileTurnMenu(
 		{ kind: 'edge-face', options },
-		formatEdgeFaceTarget(options),
+		formatFaceTarget(options),
 		[options[0].label, options[1].label, '取消'],
 	)
 }
 
-const showEdgeDirectionMenu = (
-	face: MobileEdgeFaceOption,
-	previousOptions: [MobileEdgeFaceOption, MobileEdgeFaceOption],
+const showCornerFaceMenu = (
+	options: [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
 ) => {
 	showMobileTurnMenu(
-		{ kind: 'edge-direction', face, previousOptions },
-		formatEdgeDirectionTarget(face),
+		{ kind: 'corner-face', options },
+		formatFaceTarget(options),
+		[options[0].label, options[1].label, options[2].label],
+	)
+}
+
+const showFaceDirectionMenu = (
+	face: MobileFaceOption,
+	previousOptions:
+		| [MobileEdgeFaceOption, MobileEdgeFaceOption]
+		| [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption],
+) => {
+	showMobileTurnMenu(
+		{ kind: 'face-direction', face, previousOptions },
+		formatFaceDirectionTarget(face),
 		['順轉', '逆轉', '上一步'],
 	)
 }
@@ -391,6 +418,39 @@ const getEdgeFaceOptionsFromMesh = (
 	}
 
 	return [options[0], options[1]]
+}
+
+const getCornerFaceOptionsFromMesh = (
+	mesh: THREE.Mesh,
+): [MobileCornerFaceOption, MobileCornerFaceOption, MobileCornerFaceOption] | null => {
+	const position = getRoundedGridPosition(mesh)
+	if (!position) {
+		return null
+	}
+
+	const targets = getCornerFaceTargetsFromGridPosition(position)
+	if (!targets) {
+		return null
+	}
+
+	const labelByNotation = getStickerLabelByNotation(mesh)
+	const options = targets.map((target) => {
+		const label = labelByNotation[target.notation]
+		if (!label) {
+			return null
+		}
+
+		return {
+			label,
+			notation: target.notation,
+		}
+	})
+
+	if (options[0] === null || options[1] === null || options[2] === null) {
+		return null
+	}
+
+	return [options[0], options[1], options[2]]
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -600,7 +660,12 @@ mobileTurnOptionAButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showEdgeDirectionMenu(pendingMobileTurn.options[0], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[0], pendingMobileTurn.options)
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'corner-face') {
+		showFaceDirectionMenu(pendingMobileTurn.options[0], pendingMobileTurn.options)
 		return
 	}
 
@@ -621,7 +686,12 @@ mobileTurnOptionBButton?.addEventListener('click', () => {
 	}
 
 	if (pendingMobileTurn.kind === 'edge-face') {
-		showEdgeDirectionMenu(pendingMobileTurn.options[1], pendingMobileTurn.options)
+		showFaceDirectionMenu(pendingMobileTurn.options[1], pendingMobileTurn.options)
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'corner-face') {
+		showFaceDirectionMenu(pendingMobileTurn.options[1], pendingMobileTurn.options)
 		return
 	}
 
@@ -630,12 +700,27 @@ mobileTurnOptionBButton?.addEventListener('click', () => {
 })
 
 mobileTurnOptionCButton?.addEventListener('click', () => {
-	if (!pendingMobileTurn || pendingMobileTurn.kind !== 'edge-direction') {
+	if (!pendingMobileTurn) {
 		hideMobileTurnMenu()
 		return
 	}
 
-	showEdgeFaceMenu(pendingMobileTurn.previousOptions)
+	if (pendingMobileTurn.kind === 'corner-face') {
+		showFaceDirectionMenu(pendingMobileTurn.options[2], pendingMobileTurn.options)
+		return
+	}
+
+	if (pendingMobileTurn.kind !== 'face-direction') {
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (pendingMobileTurn.previousOptions.length === 2) {
+		showEdgeFaceMenu(pendingMobileTurn.previousOptions)
+		return
+	}
+
+	showCornerFaceMenu(pendingMobileTurn.previousOptions)
 })
 
 mobileTurnMenuEl?.addEventListener('click', (event) => {
@@ -669,11 +754,17 @@ renderer.domElement.addEventListener('click', (event) => {
 	}
 
 	const edgeOptions = getEdgeFaceOptionsFromMesh(hitMesh)
-	if (!edgeOptions) {
+	if (edgeOptions) {
+		showEdgeFaceMenu(edgeOptions)
 		return
 	}
 
-	showEdgeFaceMenu(edgeOptions)
+	const cornerOptions = getCornerFaceOptionsFromMesh(hitMesh)
+	if (!cornerOptions) {
+		return
+	}
+
+	showCornerFaceMenu(cornerOptions)
 })
 
 registerMoveKeyboard({ moveMap, enqueueMoveByNotation })
