@@ -15,8 +15,11 @@ import { createScrambleController } from './feature/scramble'
 import { registerRubiksDebug } from './feature/debug'
 import {
 	createXyzFeature,
+	getEdgeFaceTargetsFromGridPosition,
 	resolveCenterTurnNotation,
+	resolveFaceTurnNotation,
 	type CenterTurnSelection,
+	type EdgeFaceTarget,
 } from './feature/xyz'
 import {
 	createCubeStateAdapter,
@@ -39,7 +42,7 @@ app.innerHTML = `
 				<h1>Rubik's Cube</h1>
 				<p>按小寫順時針，按大寫逆時針</p>
 				<p>U D L R F B 對應六個面</p>
-				<p>點中心塊可選順轉、逆轉、取消</p>
+				<p>手機點中心塊或邊塊可操作轉動</p>
 				<button id="scramble-button" type="button">打亂</button>
 				<p id="move-status">狀態：待命</p>
 			</div>
@@ -49,14 +52,14 @@ app.innerHTML = `
 		</div>
 		${xyzFeature.renderView()}
 	</div>
-	<div id="center-turn-menu" class="center-turn-menu" hidden>
-		<div class="center-turn-card" role="dialog" aria-modal="true" aria-labelledby="center-turn-title">
-			<h2 id="center-turn-title">中心塊轉動</h2>
-			<p id="center-turn-target" class="center-turn-target">請選擇轉動方向</p>
+	<div id="mobile-turn-menu" class="center-turn-menu" hidden>
+		<div class="center-turn-card" role="dialog" aria-modal="true" aria-labelledby="mobile-turn-title">
+			<h2 id="mobile-turn-title">手機轉動</h2>
+			<p id="mobile-turn-target" class="center-turn-target">請選擇操作</p>
 			<div class="center-turn-actions">
-				<button id="center-turn-clockwise" type="button">順轉</button>
-				<button id="center-turn-counterclockwise" type="button">逆轉</button>
-				<button id="center-turn-cancel" type="button">取消</button>
+				<button id="mobile-turn-option-a" type="button">選項一</button>
+				<button id="mobile-turn-option-b" type="button">選項二</button>
+				<button id="mobile-turn-option-c" type="button">取消</button>
 			</div>
 		</div>
 	</div>
@@ -65,13 +68,11 @@ app.innerHTML = `
 const statusEl = document.querySelector<HTMLParagraphElement>('#move-status')
 const scrambleButton = document.querySelector<HTMLButtonElement>('#scramble-button')
 const historyListEl = document.querySelector<HTMLDivElement>('#move-history-list')
-const centerTurnMenuEl = document.querySelector<HTMLDivElement>('#center-turn-menu')
-const centerTurnTargetEl = document.querySelector<HTMLParagraphElement>('#center-turn-target')
-const centerTurnClockwiseButton = document.querySelector<HTMLButtonElement>('#center-turn-clockwise')
-const centerTurnCounterclockwiseButton = document.querySelector<HTMLButtonElement>(
-	'#center-turn-counterclockwise',
-)
-const centerTurnCancelButton = document.querySelector<HTMLButtonElement>('#center-turn-cancel')
+const mobileTurnMenuEl = document.querySelector<HTMLDivElement>('#mobile-turn-menu')
+const mobileTurnTargetEl = document.querySelector<HTMLParagraphElement>('#mobile-turn-target')
+const mobileTurnOptionAButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-a')
+const mobileTurnOptionBButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-b')
+const mobileTurnOptionCButton = document.querySelector<HTMLButtonElement>('#mobile-turn-option-c')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio, 2))
@@ -118,6 +119,29 @@ const facePalette = {
 	inner: '#111827',
 }
 
+type MobileEdgeFaceOption = {
+	label: string
+	notation: EdgeFaceTarget['notation']
+}
+
+const colorLabelByHex: Record<string, string> = {
+	[new THREE.Color(facePalette.right).getHexString()]: '橘色',
+	[new THREE.Color(facePalette.left).getHexString()]: '紅色',
+	[new THREE.Color(facePalette.up).getHexString()]: '黃色',
+	[new THREE.Color(facePalette.down).getHexString()]: '白色',
+	[new THREE.Color(facePalette.front).getHexString()]: '綠色',
+	[new THREE.Color(facePalette.back).getHexString()]: '藍色',
+}
+
+const localFaceDescriptors: Array<{ materialIndex: number; normal: THREE.Vector3 }> = [
+	{ materialIndex: 0, normal: new THREE.Vector3(1, 0, 0) },
+	{ materialIndex: 1, normal: new THREE.Vector3(-1, 0, 0) },
+	{ materialIndex: 2, normal: new THREE.Vector3(0, 1, 0) },
+	{ materialIndex: 3, normal: new THREE.Vector3(0, -1, 0) },
+	{ materialIndex: 4, normal: new THREE.Vector3(0, 0, 1) },
+	{ materialIndex: 5, normal: new THREE.Vector3(0, 0, -1) },
+]
+
 const roundedQuarterTurn = (angle: number) => {
 	const quarter = Math.PI / 2
 	return Math.round(angle / quarter) * quarter
@@ -160,29 +184,91 @@ const formatCenterTarget = (selection: CenterTurnSelection) => {
 	return `已選中心塊：${label}`
 }
 
+const formatEdgeFaceTarget = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption]) =>
+	`已選邊塊：${options[0].label} / ${options[1].label}（先選轉動面）`
+
+const formatEdgeDirectionTarget = (face: MobileEdgeFaceOption) =>
+	`已選面：${face.label}（再選順轉或逆轉）`
+
 const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
-let pendingCenterTurn: CenterTurnSelection | null = null
 
-const hideCenterTurnMenu = () => {
-	if (!centerTurnMenuEl) {
+type MobileTurnMenuState =
+	| {
+		kind: 'center-direction'
+		selection: CenterTurnSelection
+	}
+	| {
+		kind: 'edge-face'
+		options: [MobileEdgeFaceOption, MobileEdgeFaceOption]
+	}
+	| {
+		kind: 'edge-direction'
+		face: MobileEdgeFaceOption
+		previousOptions: [MobileEdgeFaceOption, MobileEdgeFaceOption]
+	}
+
+let pendingMobileTurn: MobileTurnMenuState | null = null
+
+const hideMobileTurnMenu = () => {
+	if (!mobileTurnMenuEl) {
 		return
 	}
 
-	centerTurnMenuEl.hidden = true
-	pendingCenterTurn = null
+	mobileTurnMenuEl.hidden = true
+	pendingMobileTurn = null
 }
 
-const showCenterTurnMenu = (selection: CenterTurnSelection) => {
-	if (!centerTurnMenuEl) {
+const showMobileTurnMenu = (
+	state: MobileTurnMenuState,
+	targetText: string,
+	labels: [string, string, string],
+) => {
+	if (!mobileTurnMenuEl) {
 		return
 	}
 
-	pendingCenterTurn = selection
-	if (centerTurnTargetEl) {
-		centerTurnTargetEl.textContent = formatCenterTarget(selection)
+	pendingMobileTurn = state
+	if (mobileTurnTargetEl) {
+		mobileTurnTargetEl.textContent = targetText
 	}
-	centerTurnMenuEl.hidden = false
+	if (mobileTurnOptionAButton) {
+		mobileTurnOptionAButton.textContent = labels[0]
+	}
+	if (mobileTurnOptionBButton) {
+		mobileTurnOptionBButton.textContent = labels[1]
+	}
+	if (mobileTurnOptionCButton) {
+		mobileTurnOptionCButton.textContent = labels[2]
+	}
+	mobileTurnMenuEl.hidden = false
+}
+
+const showCenterDirectionMenu = (selection: CenterTurnSelection) => {
+	showMobileTurnMenu(
+		{ kind: 'center-direction', selection },
+		formatCenterTarget(selection),
+		['順轉', '逆轉', '取消'],
+	)
+}
+
+const showEdgeFaceMenu = (options: [MobileEdgeFaceOption, MobileEdgeFaceOption]) => {
+	showMobileTurnMenu(
+		{ kind: 'edge-face', options },
+		formatEdgeFaceTarget(options),
+		[options[0].label, options[1].label, '取消'],
+	)
+}
+
+const showEdgeDirectionMenu = (
+	face: MobileEdgeFaceOption,
+	previousOptions: [MobileEdgeFaceOption, MobileEdgeFaceOption],
+) => {
+	showMobileTurnMenu(
+		{ kind: 'edge-direction', face, previousOptions },
+		formatEdgeDirectionTarget(face),
+		['順轉', '逆轉', '上一步'],
+	)
 }
 
 const getRoundedGridCoord = (value: number) => {
@@ -190,14 +276,25 @@ const getRoundedGridCoord = (value: number) => {
 	return Math.abs(value - normalized * gap) < 0.001 ? normalized : null
 }
 
-const getCenterTurnSelectionFromMesh = (mesh: THREE.Mesh): CenterTurnSelection | null => {
-	const rx = getRoundedGridCoord(mesh.position.x)
-	const ry = getRoundedGridCoord(mesh.position.y)
-	const rz = getRoundedGridCoord(mesh.position.z)
+const getRoundedGridPosition = (mesh: THREE.Mesh) => {
+	const x = getRoundedGridCoord(mesh.position.x)
+	const y = getRoundedGridCoord(mesh.position.y)
+	const z = getRoundedGridCoord(mesh.position.z)
 
-	if (rx === null || ry === null || rz === null) {
+	if (x === null || y === null || z === null) {
 		return null
 	}
+
+	return { x, y, z }
+}
+
+const getCenterTurnSelectionFromMesh = (mesh: THREE.Mesh): CenterTurnSelection | null => {
+	const position = getRoundedGridPosition(mesh)
+	if (!position) {
+		return null
+	}
+
+	const { x: rx, y: ry, z: rz } = position
 
 	if (Math.abs(rx) === 1 && ry === 0 && rz === 0) {
 		return { axis: 'x', sign: rx as 1 | -1 }
@@ -212,6 +309,88 @@ const getCenterTurnSelectionFromMesh = (mesh: THREE.Mesh): CenterTurnSelection |
 	}
 
 	return null
+}
+
+const getFaceNotationFromWorldNormal = (normal: THREE.Vector3): EdgeFaceTarget['notation'] | null => {
+	const absX = Math.abs(normal.x)
+	const absY = Math.abs(normal.y)
+	const absZ = Math.abs(normal.z)
+	const max = Math.max(absX, absY, absZ)
+	if (max < 0.85) {
+		return null
+	}
+
+	if (absX === max) {
+		return normal.x >= 0 ? 'r' : 'l'
+	}
+	if (absY === max) {
+		return normal.y >= 0 ? 'u' : 'd'
+	}
+	return normal.z >= 0 ? 'f' : 'b'
+}
+
+const getStickerLabelByNotation = (mesh: THREE.Mesh) => {
+	const result: Partial<Record<EdgeFaceTarget['notation'], string>> = {}
+	const materials = Array.isArray(mesh.material) ? mesh.material : null
+	if (!materials) {
+		return result
+	}
+
+	for (const descriptor of localFaceDescriptors) {
+		const material = materials[descriptor.materialIndex]
+		if (!(material instanceof THREE.MeshStandardMaterial)) {
+			continue
+		}
+
+		const notation = getFaceNotationFromWorldNormal(
+			descriptor.normal.clone().applyQuaternion(mesh.quaternion),
+		)
+		if (!notation) {
+			continue
+		}
+
+		const label = colorLabelByHex[material.color.getHexString()]
+		if (!label) {
+			continue
+		}
+
+		result[notation] = label
+	}
+
+	return result
+}
+
+const getEdgeFaceOptionsFromMesh = (
+	mesh: THREE.Mesh,
+): [MobileEdgeFaceOption, MobileEdgeFaceOption] | null => {
+	const position = getRoundedGridPosition(mesh)
+	if (!position) {
+		return null
+	}
+
+	const targets = getEdgeFaceTargetsFromGridPosition(position)
+	if (!targets) {
+		return null
+	}
+
+	const labelByNotation = getStickerLabelByNotation(mesh)
+	const options = targets.map((target) => {
+		const label = labelByNotation[target.notation]
+		if (!label) {
+			return null
+		}
+
+		return {
+			label,
+			notation: target.notation,
+		}
+	})
+
+	if (options[0] === null || options[1] === null) {
+		return null
+	}
+
+	return [options[0], options[1]]
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -408,33 +587,60 @@ scrambleButton?.addEventListener('click', () => {
 	scrambleController.triggerScramble()
 })
 
-centerTurnClockwiseButton?.addEventListener('click', () => {
-	if (!pendingCenterTurn) {
-		hideCenterTurnMenu()
+mobileTurnOptionAButton?.addEventListener('click', () => {
+	if (!pendingMobileTurn) {
+		hideMobileTurnMenu()
 		return
 	}
 
-	enqueueMoveByNotation(resolveCenterTurnNotation(pendingCenterTurn, true))
-	hideCenterTurnMenu()
-})
-
-centerTurnCounterclockwiseButton?.addEventListener('click', () => {
-	if (!pendingCenterTurn) {
-		hideCenterTurnMenu()
+	if (pendingMobileTurn.kind === 'center-direction') {
+		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, true))
+		hideMobileTurnMenu()
 		return
 	}
 
-	enqueueMoveByNotation(resolveCenterTurnNotation(pendingCenterTurn, false))
-	hideCenterTurnMenu()
+	if (pendingMobileTurn.kind === 'edge-face') {
+		showEdgeDirectionMenu(pendingMobileTurn.options[0], pendingMobileTurn.options)
+		return
+	}
+
+	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, true))
+	hideMobileTurnMenu()
 })
 
-centerTurnCancelButton?.addEventListener('click', () => {
-	hideCenterTurnMenu()
+mobileTurnOptionBButton?.addEventListener('click', () => {
+	if (!pendingMobileTurn) {
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'center-direction') {
+		enqueueMoveByNotation(resolveCenterTurnNotation(pendingMobileTurn.selection, false))
+		hideMobileTurnMenu()
+		return
+	}
+
+	if (pendingMobileTurn.kind === 'edge-face') {
+		showEdgeDirectionMenu(pendingMobileTurn.options[1], pendingMobileTurn.options)
+		return
+	}
+
+	enqueueMoveByNotation(resolveFaceTurnNotation(pendingMobileTurn.face.notation, false))
+	hideMobileTurnMenu()
 })
 
-centerTurnMenuEl?.addEventListener('click', (event) => {
-	if (event.target === centerTurnMenuEl) {
-		hideCenterTurnMenu()
+mobileTurnOptionCButton?.addEventListener('click', () => {
+	if (!pendingMobileTurn || pendingMobileTurn.kind !== 'edge-direction') {
+		hideMobileTurnMenu()
+		return
+	}
+
+	showEdgeFaceMenu(pendingMobileTurn.previousOptions)
+})
+
+mobileTurnMenuEl?.addEventListener('click', (event) => {
+	if (event.target === mobileTurnMenuEl) {
+		hideMobileTurnMenu()
 	}
 })
 
@@ -449,16 +655,25 @@ renderer.domElement.addEventListener('click', (event) => {
 		return
 	}
 
-	const selection = intersects
+	const hitMesh = intersects
 		.map((hit) => hit.object)
-		.filter((object): object is THREE.Mesh => object instanceof THREE.Mesh)
-		.map((mesh) => getCenterTurnSelectionFromMesh(mesh))
-		.find((candidate): candidate is CenterTurnSelection => candidate !== null)
-	if (!selection) {
+		.find((object): object is THREE.Mesh => object instanceof THREE.Mesh)
+	if (!hitMesh) {
 		return
 	}
 
-	showCenterTurnMenu(selection)
+	const selection = getCenterTurnSelectionFromMesh(hitMesh)
+	if (selection) {
+		showCenterDirectionMenu(selection)
+		return
+	}
+
+	const edgeOptions = getEdgeFaceOptionsFromMesh(hitMesh)
+	if (!edgeOptions) {
+		return
+	}
+
+	showEdgeFaceMenu(edgeOptions)
 })
 
 registerMoveKeyboard({ moveMap, enqueueMoveByNotation })

@@ -2,7 +2,11 @@
 
 import { createBaseMoveMap } from '../moves/index.ts'
 import { createXyzFeature } from './index.ts'
-import { resolveCenterTurnNotation } from './mobile.ts'
+import {
+	getEdgeFaceTargetsFromGridPosition,
+	resolveCenterTurnNotation,
+	resolveFaceTurnNotation,
+} from './mobile.ts'
 
 const assert = (condition: unknown, message: string) => {
 	if (!condition) {
@@ -45,4 +49,31 @@ Deno.test('resolveCenterTurnNotation flips direction for negative-axis center', 
 
 	assert(cw === 'Z', 'clockwise on -Z should be Z')
 	assert(ccw === 'z', 'counterclockwise on -Z should be z')
+})
+
+
+Deno.test('getEdgeFaceTargetsFromGridPosition returns two face targets for edge cubelet', () => {
+	const targets = getEdgeFaceTargetsFromGridPosition({ x: 0, y: 1, z: 1 })
+	assert(targets !== null, 'edge selection should not be null')
+	if (!targets) {
+		throw new Error('edge selection should not be null')
+	}
+	assert(targets[0].notation === 'u', 'first target notation should be u')
+	assert(targets[1].notation === 'f', 'second target notation should be f')
+})
+
+Deno.test('getEdgeFaceTargetsFromGridPosition returns null for non-edge cubelets', () => {
+	const center = getEdgeFaceTargetsFromGridPosition({ x: 0, y: 1, z: 0 })
+	const corner = getEdgeFaceTargetsFromGridPosition({ x: 1, y: 1, z: 1 })
+
+	assert(center === null, 'center cubelet should not produce edge options')
+	assert(corner === null, 'corner cubelet should not produce edge options')
+})
+
+Deno.test('resolveFaceTurnNotation maps direction to lowercase/uppercase face move', () => {
+	const cw = resolveFaceTurnNotation('u', true)
+	const ccw = resolveFaceTurnNotation('u', false)
+
+	assert(cw === 'u', 'clockwise should keep lowercase notation')
+	assert(ccw === 'U', 'counterclockwise should convert notation to uppercase')
 })
