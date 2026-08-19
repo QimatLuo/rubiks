@@ -52,7 +52,9 @@ if (!app) {
 
 if ('serviceWorker' in navigator) {
 	globalThis.addEventListener('load', () => {
-		navigator.serviceWorker.register('/sw.js').catch((error: unknown) => {
+		navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+			scope: import.meta.env.BASE_URL,
+		}).catch((error: unknown) => {
 			console.warn('Service worker registration failed', error)
 		})
 	})
