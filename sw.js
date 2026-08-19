@@ -1,20 +1,25 @@
-const CACHE_VERSION = 'rubiks-v1'
+const CACHE_VERSION = 'rubiks-v2'
+const APP_SCOPE_URL = new URL(self.registration.scope)
 const APP_SHELL_URLS = [
-  '/',
-  '/index.html',
-  '/favicon.svg',
-  '/manifest.webmanifest',
-]
+  '.',
+  'index.html',
+  'favicon.svg',
+  'apple-touch-icon.png',
+  'icon-180.png',
+  'icon-192.png',
+  'icon-512.png',
+  'manifest.webmanifest',
+].map((path) => new URL(path, APP_SCOPE_URL).href)
 
 const getSameOriginAssetUrls = (html) => {
   const urls = new Set(APP_SHELL_URLS)
   const assetPattern = /\b(?:href|src)="([^"]+)"/g
 
   for (const match of html.matchAll(assetPattern)) {
-    const assetUrl = new URL(match[1], self.location.origin)
+    const assetUrl = new URL(match[1], APP_SCOPE_URL)
 
     if (assetUrl.origin === self.location.origin) {
-      urls.add(assetUrl.pathname + assetUrl.search)
+      urls.add(assetUrl.href)
     }
   }
 
@@ -23,10 +28,11 @@ const getSameOriginAssetUrls = (html) => {
 
 const precacheAppShell = async () => {
   const cache = await caches.open(CACHE_VERSION)
-  const indexResponse = await fetch('/index.html', { cache: 'no-cache' })
+  const indexUrl = new URL('index.html', APP_SCOPE_URL)
+  const indexResponse = await fetch(indexUrl, { cache: 'no-cache' })
   const indexHtml = await indexResponse.clone().text()
-  await cache.put('/index.html', indexResponse)
-  await cache.addAll(getSameOriginAssetUrls(indexHtml).filter((url) => url !== '/index.html'))
+  await cache.put(indexUrl.href, indexResponse)
+  await cache.addAll(getSameOriginAssetUrls(indexHtml).filter((url) => url !== indexUrl.href))
 }
 
 self.addEventListener('install', (event) => {
@@ -56,7 +62,7 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html')),
+      fetch(request).catch(() => caches.match(new URL('index.html', APP_SCOPE_URL).href)),
     )
     return
   }
