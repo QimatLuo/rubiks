@@ -50,6 +50,14 @@ if (!app) {
 	throw new Error('Missing #app container')
 }
 
+if ('serviceWorker' in navigator) {
+	globalThis.addEventListener('load', () => {
+		navigator.serviceWorker.register('/sw.js').catch((error: unknown) => {
+			console.warn('Service worker registration failed', error)
+		})
+	})
+}
+
 const latestCommitTimestamp = import.meta.env.VITE_LAST_COMMIT_TIME
 
 const xyzFeature = createXyzFeature()
