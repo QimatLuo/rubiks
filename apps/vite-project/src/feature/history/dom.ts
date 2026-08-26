@@ -23,7 +23,12 @@ type CreateMoveHistoryControllerOptions<State> = {
 	setStatus: (text: string) => void
 	isAnimating: () => boolean
 	onHistoryItemSelect?: (selection: { index: number; notation: string | null }) => void
+	onHistoryChange?: () => void
 }
+
+export type MoveHistoryControllerSnapshot<State> = ReturnType<
+	ReturnType<typeof createMoveHistoryCore<State>>['exportSnapshot']
+>
 
 type MoveCompleteOptions = {
 	historyTargetIndex?: number
@@ -43,8 +48,13 @@ export const createMoveHistoryController = <State>({
 	setStatus,
 	isAnimating,
 	onHistoryItemSelect,
+	onHistoryChange,
 }: CreateMoveHistoryControllerOptions<State>) => {
 	const core = createMoveHistoryCore<State>()
+
+	const persistHistoryChange = () => {
+		onHistoryChange?.()
+	}
 
 	const scrollHistoryToLatest = () => {
 		if (!historyListEl) {
@@ -85,6 +95,7 @@ export const createMoveHistoryController = <State>({
 		clearPendingMoves()
 		restoreState(target)
 		renderMoveHistory()
+		persistHistoryChange()
 		setStatus(`已復原到步驟 ${index}`)
 		return true
 	}
@@ -149,15 +160,34 @@ export const createMoveHistoryController = <State>({
 		initialize: () => {
 			core.initialize(captureState())
 			renderMoveHistory()
+			persistHistoryChange()
+		},
+		hydrate: (snapshot: MoveHistoryControllerSnapshot<State>) => {
+			const restored = core.hydrate(snapshot)
+			if (!restored) {
+				return false
+			}
+
+			const target = core.jumpTo(snapshot.currentHistoryIndex)
+			if (target === undefined) {
+				return false
+			}
+
+			restoreState(target)
+			renderMoveHistory()
+			persistHistoryChange()
+			return true
 		},
 		onBeforeEnqueueMove: () => {
 			core.trimFutureHistory()
 			renderMoveHistory()
+			persistHistoryChange()
 		},
 		onMoveCompleted: (notation: string, options: MoveCompleteOptions = {}) => {
 			if (typeof options.historyTargetIndex === 'number') {
 				core.setCurrentIndex(options.historyTargetIndex)
 				renderMoveHistory()
+				persistHistoryChange()
 
 				const queuedDirection = core.consumeQueuedStep()
 				if (queuedDirection !== null) {
@@ -174,6 +204,7 @@ export const createMoveHistoryController = <State>({
 
 			core.appendMove(notation, captureState())
 			renderMoveHistory()
+			persistHistoryChange()
 
 			const queuedDirection = core.consumeQueuedStep()
 			if (queuedDirection !== null) {
@@ -196,6 +227,7 @@ export const createMoveHistoryController = <State>({
 		attachClickHandler,
 		requestJump,
 		requestStep,
+		exportSnapshot: core.exportSnapshot,
 		getDebugState: core.getDebugState,
 	}
 }

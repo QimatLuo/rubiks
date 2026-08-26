@@ -1028,8 +1028,136 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 
 const cubeStateAdapter = createCubeStateAdapter(cubelets)
 
+type SerializedCubeletSnapshot = {
+	position: [number, number, number]
+	quaternion: [number, number, number, number]
+}
+
+type PersistedRubiksState = {
+	version: 1
+	lastExecutedNotation: string | null
+	history: {
+		stateHistory: SerializedCubeletSnapshot[][]
+		moveHistory: string[]
+		currentHistoryIndex: number
+	}
+}
+
+const persistedStateKey = 'rubiks-state-v1'
+
+const serializeCubeletSnapshot = (snapshot: CubeletSnapshot): SerializedCubeletSnapshot => ({
+	position: [snapshot.position.x, snapshot.position.y, snapshot.position.z],
+	quaternion: [
+		snapshot.quaternion.x,
+		snapshot.quaternion.y,
+		snapshot.quaternion.z,
+		snapshot.quaternion.w,
+	],
+})
+
+const isFiniteNumber = (value: unknown): value is number =>
+	typeof value === 'number' && Number.isFinite(value)
+
+const deserializeCubeletSnapshot = (snapshot: unknown): CubeletSnapshot | null => {
+	if (!snapshot || typeof snapshot !== 'object') {
+		return null
+	}
+
+	const { position, quaternion } = snapshot as Partial<SerializedCubeletSnapshot>
+	if (
+		!Array.isArray(position) ||
+		position.length !== 3 ||
+		!position.every(isFiniteNumber) ||
+		!Array.isArray(quaternion) ||
+		quaternion.length !== 4 ||
+		!quaternion.every(isFiniteNumber)
+	) {
+		return null
+	}
+
+	return {
+		position: new THREE.Vector3(...position),
+		quaternion: new THREE.Quaternion(...quaternion),
+	}
+}
+
+const loadPersistedRubiksState = (): PersistedRubiksState | null => {
+	try {
+		const raw = globalThis.localStorage?.getItem(persistedStateKey)
+		if (!raw) {
+			return null
+		}
+
+		const parsed = JSON.parse(raw) as Partial<PersistedRubiksState>
+		if (
+			parsed.version !== 1 ||
+			(parsed.lastExecutedNotation !== null && typeof parsed.lastExecutedNotation !== 'string') ||
+			!parsed.history ||
+			!Array.isArray(parsed.history.stateHistory) ||
+			!Array.isArray(parsed.history.moveHistory) ||
+			!parsed.history.moveHistory.every((notation) => typeof notation === 'string') ||
+			!Number.isInteger(parsed.history.currentHistoryIndex)
+		) {
+			return null
+		}
+
+		return parsed as PersistedRubiksState
+	} catch (error: unknown) {
+		console.warn('Failed to load saved Rubik state', error)
+		return null
+	}
+}
+
+const clearPersistedRubiksState = () => {
+	try {
+		globalThis.localStorage?.removeItem(persistedStateKey)
+	} catch (error: unknown) {
+		console.warn('Failed to clear saved Rubik state', error)
+	}
+}
+
+const deserializeStateHistory = (
+	stateHistory: unknown[],
+): CubeletSnapshot[][] | null => {
+	const result: CubeletSnapshot[][] = []
+
+	for (const state of stateHistory) {
+		if (!Array.isArray(state) || state.length !== cubelets.length) {
+			return null
+		}
+
+		const restoredState = state.map(deserializeCubeletSnapshot)
+		if (restoredState.some((snapshot) => snapshot === null)) {
+			return null
+		}
+
+		result.push(restoredState as CubeletSnapshot[])
+	}
+
+	return result
+}
+
 let moveQueueController!: ReturnType<typeof createMoveQueue>
 let lastExecutedNotation: string | null = null
+
+const persistRubiksState = () => {
+	try {
+		const history = moveHistoryController.exportSnapshot()
+		const payload: PersistedRubiksState = {
+			version: 1,
+			lastExecutedNotation,
+			history: {
+				moveHistory: history.moveHistory,
+				currentHistoryIndex: history.currentHistoryIndex,
+				stateHistory: history.stateHistory.map((state) => state.map(serializeCubeletSnapshot)),
+			},
+		}
+
+		globalThis.localStorage?.setItem(persistedStateKey, JSON.stringify(payload))
+	} catch (error: unknown) {
+		console.warn('Failed to save Rubik state', error)
+	}
+}
 
 const moveHistoryController = createMoveHistoryController<CubeletSnapshot[]>({
 	historyListEl,
@@ -1048,6 +1176,7 @@ const moveHistoryController = createMoveHistoryController<CubeletSnapshot[]>({
 
 		showHistoryActionMenu(selection)
 	},
+	onHistoryChange: persistRubiksState,
 })
 
 const getLayerCubelets = (move: Move) => {
@@ -1307,7 +1436,36 @@ for (const cubelet of cubelets) {
 	}
 }
 
-moveHistoryController.initialize()
+const restorePersistedRubiksState = () => {
+	const persistedState = loadPersistedRubiksState()
+	if (!persistedState) {
+		return false
+	}
+
+	const stateHistory = deserializeStateHistory(persistedState.history.stateHistory)
+	if (!stateHistory) {
+		clearPersistedRubiksState()
+		return false
+	}
+
+	const restored = moveHistoryController.hydrate({
+		stateHistory,
+		moveHistory: persistedState.history.moveHistory,
+		currentHistoryIndex: persistedState.history.currentHistoryIndex,
+	})
+	if (!restored) {
+		clearPersistedRubiksState()
+		return false
+	}
+
+	lastExecutedNotation = persistedState.lastExecutedNotation
+	setStatus('已載入上次狀態')
+	return true
+}
+
+if (!restorePersistedRubiksState()) {
+	moveHistoryController.initialize()
+}
 moveHistoryController.attachClickHandler()
 
 const toggleWorkspaceMode = () => {

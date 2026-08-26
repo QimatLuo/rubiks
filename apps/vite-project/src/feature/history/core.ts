@@ -9,6 +9,12 @@ export type MoveHistoryStepInstruction = {
 	targetIndex: number
 }
 
+export type MoveHistorySnapshot<State> = {
+	stateHistory: State[]
+	moveHistory: string[]
+	currentHistoryIndex: number
+}
+
 export const createMoveHistoryCore = <State>() => {
 	const stateHistory: State[] = []
 	const moveHistory: string[] = []
@@ -21,6 +27,26 @@ export const createMoveHistoryCore = <State>() => {
 
 	const initialize = (initialState: State) => {
 		stateHistory.push(initialState)
+	}
+
+	const hydrate = (snapshot: MoveHistorySnapshot<State>) => {
+		if (snapshot.stateHistory.length !== snapshot.moveHistory.length + 1) {
+			return false
+		}
+
+		if (
+			snapshot.currentHistoryIndex < 0 ||
+			snapshot.currentHistoryIndex > snapshot.moveHistory.length
+		) {
+			return false
+		}
+
+		stateHistory.splice(0, stateHistory.length, ...snapshot.stateHistory)
+		moveHistory.splice(0, moveHistory.length, ...snapshot.moveHistory)
+		currentHistoryIndex = snapshot.currentHistoryIndex
+		queuedHistoryRestoreIndex = null
+		queuedStepDirection = null
+		return true
 	}
 
 	const trimFutureHistory = () => {
@@ -140,6 +166,7 @@ export const createMoveHistoryCore = <State>() => {
 
 	return {
 		initialize,
+		hydrate,
 		trimFutureHistory,
 		appendMove,
 		queueJump,
@@ -151,6 +178,11 @@ export const createMoveHistoryCore = <State>() => {
 		setCurrentIndex,
 		getViewItems,
 		getNotationAtIndex,
+		exportSnapshot: (): MoveHistorySnapshot<State> => ({
+			stateHistory: [...stateHistory],
+			moveHistory: [...moveHistory],
+			currentHistoryIndex,
+		}),
 		getDebugState: () => ({
 			moveHistory: [...moveHistory],
 			currentHistoryIndex,

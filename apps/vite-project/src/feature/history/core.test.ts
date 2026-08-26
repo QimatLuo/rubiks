@@ -66,3 +66,30 @@ Deno.test('move history core produces one-step instructions', () => {
 	assert(step?.notation === 'r', 'next should replay stored move notation')
 	assert(step?.targetIndex === 2, 'next should target index + 1')
 })
+
+Deno.test('move history core exports and hydrates history state', () => {
+	const core = createMoveHistoryCore<string>()
+	core.initialize('S0')
+	core.appendMove('u', 'S1')
+	core.appendMove('r', 'S2')
+	core.setCurrentIndex(1)
+
+	const restored = createMoveHistoryCore<string>()
+	const hydrated = restored.hydrate(core.exportSnapshot())
+
+	assert(hydrated, 'valid snapshot should hydrate')
+	assert(restored.jumpTo(1) === 'S1', 'hydrated history should restore selected state')
+	assert(restored.getDebugState().currentHistoryIndex === 1, 'current index should hydrate')
+	assert(restored.getDebugState().moveHistory.join('') === 'ur', 'move history should hydrate')
+})
+
+Deno.test('move history core rejects invalid snapshots', () => {
+	const core = createMoveHistoryCore<string>()
+	const hydrated = core.hydrate({
+		stateHistory: ['S0'],
+		moveHistory: ['u'],
+		currentHistoryIndex: 1,
+	})
+
+	assert(!hydrated, 'state count must match move history length')
+})

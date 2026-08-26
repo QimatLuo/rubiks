@@ -179,3 +179,32 @@ Deno.test('move history controller provides animated previous and next steps', (
 	assert(nextStep?.notation === 'r', 'next step should use stored forward notation')
 	assert(nextStep?.targetIndex === 2, 'next step should target later index')
 })
+
+Deno.test('move history controller hydrates and restores current state', () => {
+	const historyListEl = createMockListElement()
+	const restored: string[] = []
+	let changeCount = 0
+
+	const controller = createMoveHistoryController<string>({
+		historyListEl,
+		captureState: () => 'unused',
+		restoreState: (state: string) => restored.push(state),
+		clearPendingMoves: () => {},
+		setStatus: () => {},
+		isAnimating: () => false,
+		onHistoryChange: () => {
+			changeCount += 1
+		},
+	})
+
+	const hydrated = controller.hydrate({
+		stateHistory: ['S0', 'S1', 'S2'],
+		moveHistory: ['u', 'r'],
+		currentHistoryIndex: 1,
+	})
+
+	assert(hydrated, 'valid snapshot should hydrate')
+	assert(restored[0] === 'S1', 'hydrate should restore current history state')
+	assert(historyListEl.innerHTML.includes('>U<'), 'hydrate should render existing moves')
+	assert(changeCount === 1, 'hydrate should notify persistence hook')
+})
